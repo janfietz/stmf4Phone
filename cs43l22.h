@@ -505,6 +505,21 @@
 /*===========================================================================*/
 /* Driver pre-compile time settings.                                         */
 /*===========================================================================*/
+/**
+ * @brief
+ * @note
+ */
+#if !defined(CS43L22_I2C_TIMEOUT) || defined(__DOXYGEN__)
+#define CS43L22_I2C_TIMEOUT 1000
+#endif
+
+/**
+ * @brief
+ * @note
+ */
+#if !defined(CS43L22_RESET_DELAY) || defined(__DOXYGEN__)
+#define CS43L22_RESET_DELAY 10
+#endif
 
 /*===========================================================================*/
 /* Derived constants and error checks.                                       */
@@ -531,9 +546,17 @@ typedef enum {
  * @note    It could be empty on some architectures.
  */
 typedef struct {
+    i2caddr_t address;
+    ioportid_t reset_port;
+    uint16_t reset_pad;
 	I2CDriver *i2cp;
 	I2SDriver *i2sp;
 } CS43L22Config;
+
+/**
+ * @brief   Type of a structure representing an CS43L22Driver driver.
+ */
+typedef struct CS43L22Driver CS43L22Driver;
 
 /**
  * @brief   Structure representing an CS43L22 driver.
@@ -564,6 +587,7 @@ extern "C" {
   void cs43l22ObjectInit(CS43L22Driver *cs43l22p);
   void cs43l22Start(CS43L22Driver *cs43l22p, const CS43L22Config *config);
   void cs43l22Stop(CS43L22Driver *cs43l22p);
+  void cs43l22Beep(CS43L22Driver *cs43l22p);
 #ifdef __cplusplus
 }
 #endif
