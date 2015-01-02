@@ -69,14 +69,14 @@
  * @brief   Enables the I2C subsystem.
  */
 #if !defined(HAL_USE_I2C) || defined(__DOXYGEN__)
-#define HAL_USE_I2C                 FALSE
+#define HAL_USE_I2C                 TRUE
 #endif
 
 /**
  * @brief   Enables the I2S subsystem.
  */
 #if !defined(HAL_USE_I2S) || defined(__DOXYGEN__)
-#define HAL_USE_I2S                 FALSE
+#define HAL_USE_I2S                 TRUE
 #endif
 
 /**
@@ -320,6 +320,13 @@
  */
 #if !defined(SPI_USE_MUTUAL_EXCLUSION) || defined(__DOXYGEN__)
 #define SPI_USE_MUTUAL_EXCLUSION    TRUE
+#endif
+
+/**
+ * @brief   Enables the CS43L22 subsystem.
+ */
+#if !defined(HAL_USE_CS43L22) || defined(__DOXYGEN__)
+#define HAL_USE_CS43L22                 TRUE
 #endif
 
 #endif /* _HALCONF_H_ */
