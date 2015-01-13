@@ -518,7 +518,7 @@
  * @note
  */
 #if !defined(CS43L22_RESET_DELAY) || defined(__DOXYGEN__)
-#define CS43L22_RESET_DELAY 10
+#define CS43L22_RESET_DELAY 100
 #endif
 
 /*===========================================================================*/
@@ -549,8 +549,8 @@ typedef struct {
     i2caddr_t address;
     ioportid_t reset_port;
     uint16_t reset_pad;
-	I2CDriver *i2cp;
-	I2SDriver *i2sp;
+    I2CDriver *i2cp;
+    I2SDriver *i2sp;
 } CS43L22Config;
 
 /**

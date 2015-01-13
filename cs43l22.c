@@ -7,6 +7,7 @@
  */
 
 #include "hal.h"
+#include "cs43l22.h"
 
 #if HAL_USE_CS43L22 || defined(__DOXYGEN__)
 
@@ -40,13 +41,36 @@ static msg_t _cs43l22_set(CS43L22Driver *cs43l22p, uint8_t reg , uint8_t value)
     return rv;
 }
 
+static msg_t _cs43l22_get(CS43L22Driver *cs43l22p, uint8_t reg , uint8_t* value)
+{
+    msg_t rv = i2cMasterTransmitTimeout(
+            cs43l22p->config->i2cp,
+            cs43l22p->config->address,
+            &reg , 1,
+            value , 1,
+            CS43L22_I2C_TIMEOUT);
+    return rv;
+}
+
 /* Reset the CS43L22 */
 static void _cs43l22_reset_output(CS43L22Driver *cs43l22p)
 {
     palClearPad(cs43l22p->config->reset_port , cs43l22p->config->reset_pad);
-    chThdSleep(CS43L22_RESET_DELAY);
+    chThdSleep(MS2ST(CS43L22_RESET_DELAY));
     palSetPad(cs43l22p->config->reset_port , cs43l22p->config->reset_pad);
-    chThdSleep(CS43L22_RESET_DELAY);
+    chThdSleep(MS2ST(CS43L22_RESET_DELAY));
+}
+
+
+void _cs43l22_set_volume(CS43L22Driver *cs43l22p, uint8_t volume )
+{
+    if ( volume > 0xe6 ) {
+        volume -= 0xe7;
+    } else {
+        volume += 0x19;
+    }
+    _cs43l22_set(cs43l22p, CS43L22_REG_MASTER_VOLUME_A , volume);
+    _cs43l22_set(cs43l22p, CS43L22_REG_MASTER_VOLUME_B , volume);
 }
 
 /*===========================================================================*/
@@ -93,12 +117,18 @@ void cs43l22Start(CS43L22Driver *cs43l22p, const CS43L22Config *config) {
   osalDbgAssert((cs43l22p->state == CS43L22_STOP) || (cs43l22p->state == CS43L22_READY),
                 "invalid state");
   cs43l22p->config = config;
+
   osalSysUnlock();
 
   _cs43l22_reset_output(cs43l22p);
 
   // Make sure the device is powered down
   _cs43l22_set(cs43l22p, CS43L22_REG_PWR_CTL1 , CS43L22_PWR1_DOWN );
+
+  // read some stuff
+  uint8_t idRegister = 0;
+  _cs43l22_get(cs43l22p, CS43L22_REG_GET_ID, &idRegister);
+
   // Activate headphone channels
   _cs43l22_set(cs43l22p, CS43L22_REG_PWR_CTL2 ,
           CS43L22_PWR2_SPKA_OFF | CS43L22_PWR2_SPKB_OFF
@@ -109,7 +139,7 @@ void cs43l22Start(CS43L22Driver *cs43l22p, const CS43L22Config *config) {
   // Set input data format
   _cs43l22_set(cs43l22p, CS43L22_REG_INT_CTL1 , CS43L22_IC1_SLAVE
           | CS43L22_IC1_SCPOL_OFF | CS43L22_IC1_DSP_OFF
-          | CS43L22_IC1_DIF_I2S | CS43L22_IC1_AWL_32 );
+          | CS43L22_IC1_DIF_I2S | CS43L22_IC1_AWL_16 );
   // Fire it up
   _cs43l22_set(cs43l22p, CS43L22_REG_PWR_CTL1 , CS43L22_PWR1_UP );
   // Analog soft ramp/zero cross disabled
@@ -125,6 +155,8 @@ void cs43l22Start(CS43L22Driver *cs43l22p, const CS43L22Config *config) {
   _cs43l22_set(cs43l22p, CS43L22_REG_TONE_CTL , 0xf );
   _cs43l22_set(cs43l22p, CS43L22_REG_PCM_A , 0x00 );
   _cs43l22_set(cs43l22p, CS43L22_REG_PCM_B , 0x00 );
+
+  _cs43l22_set_volume(cs43l22p, 200);
 
   osalSysLock();
   cs43l22p->state = CS43L22_READY;
@@ -148,6 +180,15 @@ void cs43l22Stop(CS43L22Driver *cs43l22p) {
 
   cs43l22p->state = CS43L22_STOP;
   osalSysUnlock();
+}
+
+void cs43l22Beep(CS43L22Driver *cs43l22p)
+{
+    if (cs43l22p->state == CS43L22_READY)
+    {
+        _cs43l22_set(cs43l22p, CS43L22_REG_BEEP_TONE_CFG , CS43L22_B3_BEEP_CFG_OFF);
+        _cs43l22_set(cs43l22p, CS43L22_REG_BEEP_TONE_CFG , CS43L22_B3_BEEP_CFG_SINGLE);
+    }
 }
 
 #endif /* HAL_USE_CS43L22 */

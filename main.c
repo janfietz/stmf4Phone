@@ -19,12 +19,69 @@
 #include "test.h"
 #include "cs43l22.h"
 
+#include "float.h"
+#include "math.h"
+
 #define I2S_BUF_SIZE            256
 #define CS43L22_ADDR 0x4a
+#define SAMPLERATE 44100
+#define BITS 16
 
-static i2cflags_t errors = 0;
+#define STM32F4_I2S_CFG_MODE_I2S ((uint16_t)0x0800)
+/* I2S configuration - Peripheral enabled */
+#define STM32F4_I2S_CFG_ENABLED ((uint16_t)0x0400)
+/* I2S configuration - Peripheral disabled */
+#define STM32F4_I2S_CFG_DISABLED ((uint16_t)0x0000)
+/* I2S configuration - I2S configuration mode - Master/transmit */
+#define STM32F4_I2S_CFG_CFG_MS_TX ((uint16_t)0x0200)
+/* I2S configuration - I2S configuration mode - Slave/transmit */
+#define STM32F4_I2S_CFG_CFG_SL_TX ((uint16_t)0x0000)
+/* I2S configuration - I2S configuration mode - Slave/receive */
+#define STM32F4_I2S_CFG_CFG_SL_RX ((uint16_t)0x0100)
+/* I2S configuration - I2S configuration mode - Master/receive */
+#define STM32F4_I2S_CFG_CFG_MS_RX ((uint16_t)0x0300)
+/* I2S configuration - PCM frame sync - Long frame */
+#define STM32F4_I2S_CFG_PCMSYNC_LONG ((uint16_t)0x0080)
+/* I2S configuration - PCM frame sync - Short frame */
+#define STM32F4_I2S_CFG_PCMSYNC_SHORT ((uint16_t)0x0000)
+/* I2S configuration - I2S standard - Right justified */
+#define STM32F4_I2S_CFG_STD_LSB ((uint16_t)0x0020)
+/* I2S configuration - I2S standard - I2S Philips standard */
+#define STM32F4_I2S_CFG_STD_I2S ((uint16_t)0x0000)
+/* I2S configuration - I2S standard - Left justified */
+#define STM32F4_I2S_CFG_STD_MSB ((uint16_t)0x0010)
+/* I2S configuration - I2S standard - PCM standard */
+#define STM32F4_I2S_CFG_STD_PCM ((uint16_t)0x0030)
+/* I2S configuration - Reverse clock polarity - ON */
+#define STM32F4_I2S_CFG_RCPOL_ON ((uint16_t)0x0008)
+/* I2S configuration - Reverse clock polarity - OFF */
+#define STM32F4_I2S_CFG_RCPOL_OFF ((uint16_t)0x0000)
+/* I2S configuration - Data length - 32-bit */
+#define STM32F4_I2S_CFG_DLEN_32 ((uint16_t)0x0004)
+/* I2S configuration - Data length - 16-bit */
+#define STM32F4_I2S_CFG_DLEN_16 ((uint16_t)0x0000)
+/* I2S configuration - Data length - 24-bit */
+#define STM32F4_I2S_CFG_DLEN_24 ((uint16_t)0x0002)
+/* I2S configuration - Channel length - 32-bit */
+#define STM32F4_I2S_CFG_CLEN_32 ((uint16_t)0x0001)
+/* I2S configuration - Channel length - 16-bit */
+#define STM32F4_I2S_CFG_CLEN_16 ((uint16_t)0x0000)
 
-static uint16_t i2s_rx_buf[I2S_BUF_SIZE];
+/* I2S prescaler */
+#define STM32F4_I2S_OFFS_PR 0x00000020
+/* I2S prescaler - Master clock output - ON */
+#define STM32F4_I2S_PR_MCLK_ON ((uint16_t)0x0200)
+/* I2S prescaler - Master clock output - OFF */
+#define STM32F4_I2S_PR_MCLK_OFF ((uint16_t)0x0000)
+/* I2S prescaler - Odd factor - Divider is I2SDIV * 2 */
+#define STM32F4_I2S_PR_EVEN ((uint16_t)0x0000)
+/* I2S prescaler - Odd factor - Divider is 1 + I2SDIV * 2 */
+#define STM32F4_I2S_PR_ODD ((uint16_t)0x0100)
+/* I2S prescaler - Divider - Mask */
+#define STM32F4_I2S_PR_DIV_MASK ((uint16_t)0x00ff)
+
+static int16_t i2s_tx_buf[I2S_BUF_SIZE];
+
 static void i2scallback(I2SDriver *i2sp, size_t offset, size_t n);
 
 static CS43L22Driver cs43l22;
@@ -37,20 +94,42 @@ static const I2CConfig i2cfg1 = {
 };
 
 
-static const I2SConfig i2scfg = {
+static I2SConfig i2scfg = {
+        i2s_tx_buf,
   NULL,
-  i2s_rx_buf,
   I2S_BUF_SIZE,
   i2scallback,
-  0,
-  16
+  SPI_I2SCFGR_I2SCFG_1 | SPI_I2SCFGR_I2SE,
+  STM32F4_I2S_PR_MCLK_ON
 };
+#define TWO_PI (M_PI * 2)
+static float currentPhase = 0.0f;
+static float amplitude = 16000.0f;
+static void sine(uint16_t frequency, uint16_t sampleRate, size_t samples, int16_t* buffer)
+{
+    float phaseInc = (TWO_PI) / sampleRate * frequency;
+    size_t i;
+    for (i = 0; i < samples / 2; i++)
+    {
+        buffer[i] = (int16_t)((amplitude * sinf(currentPhase)) + 32000.0f);
+        buffer[i+1] = buffer[i];
+        currentPhase += phaseInc;
+        if (currentPhase > TWO_PI)
+        {
+            currentPhase = currentPhase - TWO_PI;
+        }
+    }
+
+
+
+
+}
 
 static void i2scallback(I2SDriver *i2sp, size_t offset, size_t n) {
 
-  (void)i2sp;
-  (void)offset;
   (void)n;
+  /* catch half and full tx events*/
+  sine(1000, SAMPLERATE, n, i2s_tx_buf + offset);
 }
 
 static CS43L22Driver cs43l22;
@@ -103,26 +182,42 @@ int main(void) {
     palSetPadMode(GPIOA, 2, PAL_MODE_ALTERNATE(7));
     palSetPadMode(GPIOA, 3, PAL_MODE_ALTERNATE(7));
 
-
-
     /*
      * Starts I2C
      */
     i2cStart(&I2CD1, &i2cfg1);
-    palSetPadMode(GPIOB, 6, PAL_MODE_OUTPUT_OPENDRAIN | PAL_STM32_OSPEED_MID2 | PAL_MODE_ALTERNATE(4)); //SCL
-    palSetPadMode(GPIOB, 9, PAL_MODE_OUTPUT_OPENDRAIN | PAL_STM32_OSPEED_MID2 | PAL_MODE_ALTERNATE(4)); //SDA
-
     /*
     * Starting and configuring the I2S driver 3.
     */
+    palSetPadMode(GPIOD, 4, PAL_MODE_OUTPUT_PUSHPULL); //RESET
+
+
+    //calc frequency
+    uint16_t prescale;
+    uint32_t pllfreq = STM32_PLLI2SVCO / STM32_PLLI2SR_VALUE;
+    if (BITS!=16)
+        return;
+
+    // Master clock mode Fs * 256
+    prescale=(pllfreq*10)/(256*SAMPLERATE) + 5;
+    prescale/=10;
+    if (prescale > 0xFF || prescale < 2)
+        prescale=2;
+    i2scfg.i2spr = SPI_I2SPR_MCKOE | (prescale>>1);
+    if (prescale & 0x01)
+    {
+        i2scfg.i2spr |= SPI_I2SPR_ODD;
+    }
+//    // I2S WS/MCK/SCK/SD pins
     i2sStart(&I2SD3, &i2scfg);
-    palSetPadMode(GPIOA, 4, PAL_MODE_OUTPUT_PUSHPULL | PAL_STM32_OSPEED_MID2 | PAL_MODE_ALTERNATE(6)); //LRCK
-    palSetPadMode(GPIOC, 7, PAL_MODE_OUTPUT_PUSHPULL | PAL_STM32_OSPEED_MID2 | PAL_MODE_ALTERNATE(6)); //MCLK
-    palSetPadMode(GPIOC, 10, PAL_MODE_OUTPUT_PUSHPULL | PAL_STM32_OSPEED_MID2 | PAL_MODE_ALTERNATE(6)); //SCLK
-    palSetPadMode(GPIOC, 12, PAL_MODE_OUTPUT_PUSHPULL | PAL_STM32_OSPEED_MID2 | PAL_MODE_ALTERNATE(6)); //SDIN
 
-    palSetPadMode(GPIOD, 4, PAL_MODE_OUTPUT_PUSHPULL | PAL_STM32_OSPEED_MID2 | PAL_MODE_ALTERNATE(7)); //RESET
-
+    palSetPadMode(GPIOA , GPIOA_LRCK, PAL_MODE_OUTPUT_PUSHPULL |
+            PAL_STM32_OSPEED_HIGHEST | PAL_MODE_ALTERNATE(6));
+    palSetPadMode(GPIOC , GPIOC_MCLK, PAL_MODE_ALTERNATE(6) |
+            PAL_STM32_OSPEED_HIGHEST);
+    palSetPadMode(GPIOC , GPIOC_SCLK, PAL_MODE_ALTERNATE(6));
+    palSetPadMode(GPIOC , GPIOC_SDIN, PAL_MODE_ALTERNATE(6) |
+            PAL_STM32_OSPEED_HIGHEST);
 
     cs43l22Init();
     cs43l22ObjectInit(&cs43l22);
@@ -130,7 +225,6 @@ int main(void) {
     cs43l22Start(&cs43l22, &ics43l22cfg);
 
     i2sStartExchange(&I2SD3);
-
   /*
    * Creates the example thread.
    */
