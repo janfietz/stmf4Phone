@@ -22,9 +22,9 @@
 #include "float.h"
 #include "math.h"
 
-#define I2S_BUF_SIZE            256
+#define I2S_BUF_SIZE            512
 #define CS43L22_ADDR 0x4a
-#define SAMPLERATE 44100
+#define SAMPLERATE 11025
 #define BITS 16
 
 #define STM32F4_I2S_CFG_MODE_I2S ((uint16_t)0x0800)
@@ -81,6 +81,11 @@
 #define STM32F4_I2S_PR_DIV_MASK ((uint16_t)0x00ff)
 
 static int16_t i2s_tx_buf[I2S_BUF_SIZE];
+static uint16_t frequency = 1000;
+
+static size_t txBufferWriteOffset = 0;
+static size_t txBufferWriteN = I2S_BUF_SIZE/2;
+SEMAPHORE_DECL(txBufferWriteSem,1);
 
 static void i2scallback(I2SDriver *i2sp, size_t offset, size_t n);
 
@@ -99,8 +104,8 @@ static I2SConfig i2scfg = {
   NULL,
   I2S_BUF_SIZE,
   i2scallback,
-  SPI_I2SCFGR_I2SCFG_1 | SPI_I2SCFGR_I2SE,
-  STM32F4_I2S_PR_MCLK_ON
+  SPI_I2SCFGR_I2SCFG_1,
+  0
 };
 #define TWO_PI (M_PI * 2)
 static float currentPhase = 0.0f;
@@ -125,11 +130,18 @@ static void sine(uint16_t frequency, uint16_t sampleRate, size_t samples, int16_
 
 }
 
-static void i2scallback(I2SDriver *i2sp, size_t offset, size_t n) {
-
-  (void)n;
-  /* catch half and full tx events*/
-  sine(1000, SAMPLERATE, n, i2s_tx_buf + offset);
+static void i2scallback(I2SDriver *i2sp, size_t offset, size_t n)
+{
+    (void)i2sp;
+    txBufferWriteOffset = txBufferWriteOffset + offset;
+    if (txBufferWriteOffset >= I2S_BUF_SIZE)
+    {
+        txBufferWriteOffset = 0;
+    }
+    txBufferWriteN = n;
+    chSysLockFromISR();
+    chSemSignalI(&txBufferWriteSem);
+    chSysUnlockFromISR();
 }
 
 static CS43L22Driver cs43l22;
@@ -150,12 +162,34 @@ static THD_FUNCTION(Thread1, arg) {
   (void)arg;
   chRegSetThreadName("blinker");
   while (TRUE) {
-    palSetPad(GPIOD, GPIOD_LED3);       /* Orange.  */
+    //palSetPad(GPIOD, GPIOD_LED3);       /* Orange.  */
     chThdSleepMilliseconds(500);
-    palClearPad(GPIOD, GPIOD_LED3);     /* Orange.  */
+    //palClearPad(GPIOD, GPIOD_LED3);     /* Orange.  */
     chThdSleepMilliseconds(500);
 
     cs43l22Beep(&cs43l22);
+  }
+}
+
+/*
+ * TX buffer fill thread
+ */
+static THD_WORKING_AREA(waThreadPlayer, 128);
+static THD_FUNCTION(ThreadPlayer, arg) {
+
+  (void)arg;
+  chRegSetThreadName("player");
+  while (TRUE) {
+      chSemWait(&txBufferWriteSem);
+      if (txBufferWriteOffset == 0)
+      {
+          palClearPad(GPIOD, GPIOD_LED3);
+      }
+      else
+      {
+          palSetPad(GPIOD, GPIOD_LED3);
+      }
+      //sine(frequency, SAMPLERATE, I2S_BUF_SIZE/2, i2s_tx_buf + txBufferWriteOffset);
   }
 }
 
@@ -211,8 +245,7 @@ int main(void) {
 //    // I2S WS/MCK/SCK/SD pins
     i2sStart(&I2SD3, &i2scfg);
 
-    palSetPadMode(GPIOA , GPIOA_LRCK, PAL_MODE_OUTPUT_PUSHPULL |
-            PAL_STM32_OSPEED_HIGHEST | PAL_MODE_ALTERNATE(6));
+    palSetPadMode(GPIOA , GPIOA_LRCK, PAL_STM32_OSPEED_HIGHEST | PAL_MODE_ALTERNATE(6));
     palSetPadMode(GPIOC , GPIOC_MCLK, PAL_MODE_ALTERNATE(6) |
             PAL_STM32_OSPEED_HIGHEST);
     palSetPadMode(GPIOC , GPIOC_SCLK, PAL_MODE_ALTERNATE(6));
@@ -224,11 +257,16 @@ int main(void) {
 
     cs43l22Start(&cs43l22, &ics43l22cfg);
 
+    /*prefill buffer*/
+
+    //sine(frequency, SAMPLERATE, I2S_BUF_SIZE, i2s_tx_buf);
+
     i2sStartExchange(&I2SD3);
   /*
    * Creates the example thread.
    */
-  chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO, Thread1, NULL);
+  chThdCreateStatic(waThread1, sizeof(waThread1), LOWPRIO, Thread1, NULL);
+  chThdCreateStatic(waThreadPlayer, sizeof(waThreadPlayer), NORMALPRIO, ThreadPlayer, NULL);
 
   /*
    * Normal main() thread activity, in this demo it just performs
@@ -236,7 +274,13 @@ int main(void) {
    */
   while (TRUE) {
     if (palReadPad(GPIOA, GPIOA_BUTTON))
-      TestThread(&SD2);
+    {
+        frequency += 100;
+        if (frequency > 10000)
+        {
+            frequency = 100;
+        }
+    }
     chThdSleepMilliseconds(500);
   }
 }
