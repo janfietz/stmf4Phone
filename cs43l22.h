@@ -518,7 +518,7 @@
  * @note
  */
 #if !defined(CS43L22_RESET_DELAY) || defined(__DOXYGEN__)
-#define CS43L22_RESET_DELAY 100
+#define CS43L22_RESET_DELAY 10
 #endif
 
 /*===========================================================================*/
