@@ -1,18 +1,18 @@
 /*
-    ChibiOS - Copyright (C) 2006-2014 Giovanni Di Sirio
+ ChibiOS - Copyright (C) 2006-2014 Giovanni Di Sirio
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+ http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
-*/
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+ */
 
 #include "ch.h"
 #include "hal.h"
@@ -24,194 +24,161 @@
 
 #define I2S_BUF_SIZE            512
 #define CS43L22_ADDR 0x4a
-#define SAMPLERATE 11025
+#define SAMPLERATE 44100
 #define BITS 16
 
-#define STM32F4_I2S_CFG_MODE_I2S ((uint16_t)0x0800)
-/* I2S configuration - Peripheral enabled */
-#define STM32F4_I2S_CFG_ENABLED ((uint16_t)0x0400)
-/* I2S configuration - Peripheral disabled */
-#define STM32F4_I2S_CFG_DISABLED ((uint16_t)0x0000)
-/* I2S configuration - I2S configuration mode - Master/transmit */
-#define STM32F4_I2S_CFG_CFG_MS_TX ((uint16_t)0x0200)
-/* I2S configuration - I2S configuration mode - Slave/transmit */
-#define STM32F4_I2S_CFG_CFG_SL_TX ((uint16_t)0x0000)
-/* I2S configuration - I2S configuration mode - Slave/receive */
-#define STM32F4_I2S_CFG_CFG_SL_RX ((uint16_t)0x0100)
-/* I2S configuration - I2S configuration mode - Master/receive */
-#define STM32F4_I2S_CFG_CFG_MS_RX ((uint16_t)0x0300)
-/* I2S configuration - PCM frame sync - Long frame */
-#define STM32F4_I2S_CFG_PCMSYNC_LONG ((uint16_t)0x0080)
-/* I2S configuration - PCM frame sync - Short frame */
-#define STM32F4_I2S_CFG_PCMSYNC_SHORT ((uint16_t)0x0000)
-/* I2S configuration - I2S standard - Right justified */
-#define STM32F4_I2S_CFG_STD_LSB ((uint16_t)0x0020)
-/* I2S configuration - I2S standard - I2S Philips standard */
-#define STM32F4_I2S_CFG_STD_I2S ((uint16_t)0x0000)
-/* I2S configuration - I2S standard - Left justified */
-#define STM32F4_I2S_CFG_STD_MSB ((uint16_t)0x0010)
-/* I2S configuration - I2S standard - PCM standard */
-#define STM32F4_I2S_CFG_STD_PCM ((uint16_t)0x0030)
-/* I2S configuration - Reverse clock polarity - ON */
-#define STM32F4_I2S_CFG_RCPOL_ON ((uint16_t)0x0008)
-/* I2S configuration - Reverse clock polarity - OFF */
-#define STM32F4_I2S_CFG_RCPOL_OFF ((uint16_t)0x0000)
-/* I2S configuration - Data length - 32-bit */
-#define STM32F4_I2S_CFG_DLEN_32 ((uint16_t)0x0004)
-/* I2S configuration - Data length - 16-bit */
-#define STM32F4_I2S_CFG_DLEN_16 ((uint16_t)0x0000)
-/* I2S configuration - Data length - 24-bit */
-#define STM32F4_I2S_CFG_DLEN_24 ((uint16_t)0x0002)
-/* I2S configuration - Channel length - 32-bit */
-#define STM32F4_I2S_CFG_CLEN_32 ((uint16_t)0x0001)
-/* I2S configuration - Channel length - 16-bit */
-#define STM32F4_I2S_CFG_CLEN_16 ((uint16_t)0x0000)
-
-/* I2S prescaler */
-#define STM32F4_I2S_OFFS_PR 0x00000020
-/* I2S prescaler - Master clock output - ON */
-#define STM32F4_I2S_PR_MCLK_ON ((uint16_t)0x0200)
-/* I2S prescaler - Master clock output - OFF */
-#define STM32F4_I2S_PR_MCLK_OFF ((uint16_t)0x0000)
-/* I2S prescaler - Odd factor - Divider is I2SDIV * 2 */
-#define STM32F4_I2S_PR_EVEN ((uint16_t)0x0000)
-/* I2S prescaler - Odd factor - Divider is 1 + I2SDIV * 2 */
-#define STM32F4_I2S_PR_ODD ((uint16_t)0x0100)
-/* I2S prescaler - Divider - Mask */
-#define STM32F4_I2S_PR_DIV_MASK ((uint16_t)0x00ff)
-
 static int16_t i2s_tx_buf[I2S_BUF_SIZE];
-static uint16_t frequency = 1000;
+static int16_t sineTable[SAMPLERATE];
+static uint16_t frequency = 261;
 
 static size_t txBufferWriteOffset = 0;
-static size_t txBufferWriteN = I2S_BUF_SIZE/2;
-SEMAPHORE_DECL(txBufferWriteSem,1);
+static size_t txBufferWriteN = 0;
+SEMAPHORE_DECL(txBufferWriteSem, 1);
 
 static void i2scallback(I2SDriver *i2sp, size_t offset, size_t n);
 
 static CS43L22Driver cs43l22;
 
 /* I2C interface #2 */
-static const I2CConfig i2cfg1 = {
-    OPMODE_I2C,
-    400000,
-    FAST_DUTY_CYCLE_2,
-};
-
-
-static I2SConfig i2scfg = {
-        i2s_tx_buf,
-  NULL,
-  I2S_BUF_SIZE,
-  i2scallback,
-  SPI_I2SCFGR_I2SCFG_1,
-  0
-};
-#define TWO_PI (M_PI * 2)
-static float currentPhase = 0.0f;
-static float amplitude = 16000.0f;
-static void sine(uint16_t frequency, uint16_t sampleRate, size_t samples, int16_t* buffer)
+static const I2CConfig i2cfg1 =
 {
-    float phaseInc = (TWO_PI) / sampleRate * frequency;
+        OPMODE_I2C,
+        400000,
+        FAST_DUTY_CYCLE_2,
+};
+
+static I2SConfig i2scfg =
+{
+        i2s_tx_buf,
+        NULL,
+        I2S_BUF_SIZE,
+        i2scallback,
+        0,
+        0
+};
+
+#define TWO_PI (M_PI * 2)
+static float currentAmplitude = 1.0f;
+static uint16_t currentPhase = 0;
+static uint16_t counter = 0;
+
+static void precalcSine(size_t samples, int16_t* buffer)
+{
+    float phaseInc = (TWO_PI) / samples;
+    int32_t offset = ((uint16_t) - 1) / 2;
     size_t i;
-    for (i = 0; i < samples / 2; i++)
+    float phase = 0.0f;
+    for (i = 0; i < samples; i++)
     {
-        buffer[i] = (int16_t)((amplitude * sinf(currentPhase)) + 32000.0f);
-        buffer[i+1] = buffer[i];
+        buffer[i] = (int16_t)((offset * sinf(phase)));
+        phase += phaseInc;
+    }
+}
+
+static void sine(uint16_t frequency, uint16_t sampleRate, size_t samples,
+        int16_t* buffer)
+{
+    uint16_t phaseInc = frequency;
+    size_t i = 0;
+    while (i < samples)
+    {
+        int16_t value = (int16_t)(
+                (float) sineTable[currentPhase] * currentAmplitude);
+        buffer[i] = value;
+        buffer[++i] = value;
+        ++i;
         currentPhase += phaseInc;
-        if (currentPhase > TWO_PI)
+        if (currentPhase > sampleRate)
         {
-            currentPhase = currentPhase - TWO_PI;
+            currentPhase = currentPhase - sampleRate;
         }
     }
-
-
-
-
 }
 
 static void i2scallback(I2SDriver *i2sp, size_t offset, size_t n)
 {
-    (void)i2sp;
-    txBufferWriteOffset = txBufferWriteOffset + offset;
-    if (txBufferWriteOffset >= I2S_BUF_SIZE)
-    {
-        txBufferWriteOffset = 0;
-    }
-    txBufferWriteN = n;
+    (void) i2sp;
     chSysLockFromISR();
+    txBufferWriteOffset = offset;
+    txBufferWriteN = n;
     chSemSignalI(&txBufferWriteSem);
     chSysUnlockFromISR();
 }
 
 static CS43L22Driver cs43l22;
-static const CS43L22Config ics43l22cfg = {
-    CS43L22_ADDR,
-    GPIOD,
-    4,
-    &I2CD1,
-    &I2SD3,
-};
-/*
- * This is a periodic thread that does absolutely nothing except flashing
- * a LED.
- */
+static const CS43L22Config ics43l22cfg =
+{
+CS43L22_ADDR, GPIOD, 4, &I2CD1, &I2SD3, };
+
 static THD_WORKING_AREA(waThread1, 128);
-static THD_FUNCTION(Thread1, arg) {
-
-  (void)arg;
-  chRegSetThreadName("blinker");
-  while (TRUE) {
-    //palSetPad(GPIOD, GPIOD_LED3);       /* Orange.  */
-    chThdSleepMilliseconds(500);
-    //palClearPad(GPIOD, GPIOD_LED3);     /* Orange.  */
-    chThdSleepMilliseconds(500);
-
-    cs43l22Beep(&cs43l22);
-  }
+static THD_FUNCTION(Thread1, arg)
+{
+    (void) arg;
+    chRegSetThreadName("melody");
+    while (TRUE)
+    {
+        frequency = 261;
+        palSetPad(GPIOD, GPIOD_LED3); /* Orange.  */
+        chThdSleepMilliseconds(500);
+        frequency = 293;
+        palClearPad(GPIOD, GPIOD_LED3); /* Orange.  */
+        chThdSleepMilliseconds(500);
+        frequency = 329;
+        chThdSleepMilliseconds(500);
+        frequency = 349;
+        chThdSleepMilliseconds(500);
+        frequency = 391;
+        chThdSleepMilliseconds(500);
+        //cs43l22Beep(&cs43l22);
+    }
 }
 
 /*
  * TX buffer fill thread
  */
 static THD_WORKING_AREA(waThreadPlayer, 128);
-static THD_FUNCTION(ThreadPlayer, arg) {
+static THD_FUNCTION(ThreadPlayer, arg)
+{
 
-  (void)arg;
-  chRegSetThreadName("player");
-  while (TRUE) {
-      chSemWait(&txBufferWriteSem);
-      if (txBufferWriteOffset == 0)
-      {
-          palClearPad(GPIOD, GPIOD_LED3);
-      }
-      else
-      {
-          palSetPad(GPIOD, GPIOD_LED3);
-      }
-      //sine(frequency, SAMPLERATE, I2S_BUF_SIZE/2, i2s_tx_buf + txBufferWriteOffset);
-  }
+    (void) arg;
+    chRegSetThreadName("player");
+    while (TRUE)
+    {
+        chSemWait(&txBufferWriteSem);
+        if (txBufferWriteOffset == 0)
+        {
+            palClearPad(GPIOD, GPIOD_LED4);
+        }
+        else
+        {
+            palSetPad(GPIOD, GPIOD_LED4);
+        }
+        sine(frequency, SAMPLERATE, txBufferWriteN,
+                i2s_tx_buf + txBufferWriteOffset);
+    }
 }
 
 /*
  * Application entry point.
  */
-int main(void) {
-
-  /*
-   * System initializations.
-   * - HAL initialization, this also initializes the configured device drivers
-   *   and performs the board-specific initializations.
-   * - Kernel initialization, the main() function becomes a thread and the
-   *   RTOS is active.
-   */
-  halInit();
-  chSysInit();
+int main(void)
+{
 
     /*
-    * Activates the serial driver 2 using the driver default configuration.
-    * PA2(TX) and PA3(RX) are routed to USART2.
-    */
+     * System initializations.
+     * - HAL initialization, this also initializes the configured device drivers
+     *   and performs the board-specific initializations.
+     * - Kernel initialization, the main() function becomes a thread and the
+     *   RTOS is active.
+     */
+    halInit();
+    chSysInit();
+
+    precalcSine(SAMPLERATE, sineTable);
+    /*
+     * Activates the serial driver 2 using the driver default configuration.
+     * PA2(TX) and PA3(RX) are routed to USART2.
+     */
     sdStart(&SD2, NULL);
     palSetPadMode(GPIOA, 2, PAL_MODE_ALTERNATE(7));
     palSetPadMode(GPIOA, 3, PAL_MODE_ALTERNATE(7));
@@ -220,28 +187,29 @@ int main(void) {
      * Starts I2C
      */
     i2cStart(&I2CD1, &i2cfg1);
-    /*
-    * Starting and configuring the I2S driver 3.
-    */
     palSetPadMode(GPIOD, 4, PAL_MODE_OUTPUT_PUSHPULL); //RESET
 
+    /*
+     * Starting and configuring the I2S driver 3.
+     */
 
     //calc frequency
     uint16_t prescale;
     uint32_t pllfreq = STM32_PLLI2SVCO / STM32_PLLI2SR_VALUE;
-    if (BITS!=16)
+    if (BITS != 16)
         return;
 
     // Master clock mode Fs * 256
-    prescale=(pllfreq*10)/(256*SAMPLERATE) + 5;
-    prescale/=10;
+    prescale = (pllfreq * 10) / (256 * SAMPLERATE) + 5;
+    prescale /= 10;
     if (prescale > 0xFF || prescale < 2)
-        prescale=2;
-    i2scfg.i2spr = SPI_I2SPR_MCKOE | (prescale>>1);
+        prescale = 2;
+    i2scfg.i2spr = SPI_I2SPR_MCKOE | (prescale >> 1);
     if (prescale & 0x01)
     {
         i2scfg.i2spr |= SPI_I2SPR_ODD;
     }
+
 //    // I2S WS/MCK/SCK/SD pins
     i2sStart(&I2SD3, &i2scfg);
 
@@ -258,29 +226,30 @@ int main(void) {
     cs43l22Start(&cs43l22, &ics43l22cfg);
 
     /*prefill buffer*/
-
-    //sine(frequency, SAMPLERATE, I2S_BUF_SIZE, i2s_tx_buf);
+    sine(frequency, SAMPLERATE, I2S_BUF_SIZE, i2s_tx_buf);
 
     i2sStartExchange(&I2SD3);
-  /*
-   * Creates the example thread.
-   */
-  chThdCreateStatic(waThread1, sizeof(waThread1), LOWPRIO, Thread1, NULL);
-  chThdCreateStatic(waThreadPlayer, sizeof(waThreadPlayer), NORMALPRIO, ThreadPlayer, NULL);
+    /*
+     * Creates the example thread.
+     */
+    chThdCreateStatic(waThread1, sizeof(waThread1), LOWPRIO, Thread1, NULL);
+    chThdCreateStatic(waThreadPlayer, sizeof(waThreadPlayer), NORMALPRIO,
+            ThreadPlayer, NULL);
 
-  /*
-   * Normal main() thread activity, in this demo it just performs
-   * a shell respawn upon its termination.
-   */
-  while (TRUE) {
-    if (palReadPad(GPIOA, GPIOA_BUTTON))
+    /*
+     * Normal main() thread activity, in this demo it just performs
+     * a shell respawn upon its termination.
+     */
+    while (TRUE)
     {
-        frequency += 100;
-        if (frequency > 10000)
+        if (palReadPad(GPIOA, GPIOA_BUTTON))
         {
-            frequency = 100;
+            frequency += 50;
+            if (frequency > 10000)
+            {
+                frequency = 100;
+            }
         }
+        chThdSleepMilliseconds(500);
     }
-    chThdSleepMilliseconds(500);
-  }
 }
