@@ -33,8 +33,8 @@ static msg_t _cs43l22_set(CS43L22Driver *cs43l22p, uint8_t reg , uint8_t value)
     txBuffer[0] = reg;
     txBuffer[1] = value;
     msg_t rv = i2cMasterTransmitTimeout(
-            cs43l22p->config->i2cp,
-            cs43l22p->config->address,
+            cs43l22p->config->ctrlp,
+            cs43l22p->config->ctrl_address,
             txBuffer , 2,
             NULL , 0,
             CS43L22_I2C_TIMEOUT);
@@ -44,21 +44,12 @@ static msg_t _cs43l22_set(CS43L22Driver *cs43l22p, uint8_t reg , uint8_t value)
 static msg_t _cs43l22_get(CS43L22Driver *cs43l22p, uint8_t reg , uint8_t* value)
 {
     msg_t rv = i2cMasterTransmitTimeout(
-            cs43l22p->config->i2cp,
-            cs43l22p->config->address,
+            cs43l22p->config->ctrlp,
+            cs43l22p->config->ctrl_address,
             &reg , 1,
             value , 1,
             CS43L22_I2C_TIMEOUT);
     return rv;
-}
-
-/* Reset the CS43L22 */
-static void _cs43l22_reset_output(CS43L22Driver *cs43l22p)
-{
-    palClearPad(cs43l22p->config->reset_port , cs43l22p->config->reset_pad);
-    chThdSleep(MS2ST(CS43L22_RESET_DELAY));
-    palSetPad(cs43l22p->config->reset_port , cs43l22p->config->reset_pad);
-    chThdSleep(MS2ST(CS43L22_RESET_DELAY));
 }
 
 
@@ -120,7 +111,7 @@ void cs43l22Start(CS43L22Driver *cs43l22p, const CS43L22Config *config) {
 
   osalSysUnlock();
 
-  _cs43l22_reset_output(cs43l22p);
+  cs43l22p->config->reset_cb(cs43l22p);
 
   // Make sure the device is powered down
   _cs43l22_set(cs43l22p, CS43L22_REG_PWR_CTL1 , CS43L22_PWR1_DOWN );
@@ -180,6 +171,21 @@ void cs43l22Stop(CS43L22Driver *cs43l22p) {
 
   cs43l22p->state = CS43L22_STOP;
   osalSysUnlock();
+}
+
+void cs43l22ConfigureAudio(CS43L22Driver *cs43l22p, uint16_t samplerate, uint8_t bitsPerSample)
+{
+	cs43l22p->config->reconfigure_cb(samplerate, bitsPerSample);
+}
+
+void cs43l22StartTransfer(CS43L22Driver *cs43l22p)
+{
+	i2sStartExchange(cs43l22p->config->audiop);
+}
+
+void cs43l22StopTransfer(CS43L22Driver *cs43l22p)
+{
+	i2sStopExchange(cs43l22p->config->audiop);
 }
 
 void cs43l22Beep(CS43L22Driver *cs43l22p)

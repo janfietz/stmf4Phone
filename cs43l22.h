@@ -513,14 +513,6 @@
 #define CS43L22_I2C_TIMEOUT 1000
 #endif
 
-/**
- * @brief
- * @note
- */
-#if !defined(CS43L22_RESET_DELAY) || defined(__DOXYGEN__)
-#define CS43L22_RESET_DELAY 10
-#endif
-
 /*===========================================================================*/
 /* Derived constants and error checks.                                       */
 /*===========================================================================*/
@@ -539,24 +531,41 @@ typedef enum {
   CS43L22_ACTIVE = 3,                   /**< Active.                            */
   CS43L22_COMPLETE = 4                  /**< Transmission complete.             */
 } cs43l22state_t;
+/**
+ * @brief   Type of a structure representing an CS43L22Driver driver.
+ */
+typedef struct CS43L22Driver CS43L22Driver;
 
+/**
+ * @brief   I2S notification callback type.
+ *
+ * @param[in] i2sp      pointer to the @p I2SDriver object
+ * @param[in] offset    offset in buffers of the data to read/write
+ * @param[in] n         number of samples to read/write
+ */
+typedef void (*cs43l22_reset_callback_t)();
+
+/**
+ * @brief   I2S notification callback type.
+ *
+ * @param[in] i2sp      pointer to the @p I2SDriver object
+ * @param[in] offset    offset in buffers of the data to read/write
+ * @param[in] n         number of samples to read/write
+ */
+typedef void (*cs43l22_audio_reconfigure_callback_t)(uint16_t samplerate, uint8_t bitsPerSample);
 
 /**
  * @brief   Driver configuration structure.
  * @note    It could be empty on some architectures.
  */
 typedef struct {
-    i2caddr_t address;
-    ioportid_t reset_port;
-    uint16_t reset_pad;
-    I2CDriver *i2cp;
-    I2SDriver *i2sp;
+	uint16_t ctrl_address;
+    I2CDriver *ctrlp;
+    I2SDriver *audiop;
+	cs43l22_reset_callback_t reset_cb;
+    cs43l22_audio_reconfigure_callback_t reconfigure_cb;
 } CS43L22Config;
 
-/**
- * @brief   Type of a structure representing an CS43L22Driver driver.
- */
-typedef struct CS43L22Driver CS43L22Driver;
 
 /**
  * @brief   Structure representing an CS43L22 driver.
@@ -587,6 +596,9 @@ extern "C" {
   void cs43l22ObjectInit(CS43L22Driver *cs43l22p);
   void cs43l22Start(CS43L22Driver *cs43l22p, const CS43L22Config *config);
   void cs43l22Stop(CS43L22Driver *cs43l22p);
+  void cs43l22ConfigureAudio(CS43L22Driver *cs43l22p, uint16_t samplerate, uint8_t bitsPerSample);
+  void cs43l22StartTransfer(CS43L22Driver *cs43l22p);
+  void cs43l22StopTransfer(CS43L22Driver *cs43l22p);
   void cs43l22Beep(CS43L22Driver *cs43l22p);
 #ifdef __cplusplus
 }
