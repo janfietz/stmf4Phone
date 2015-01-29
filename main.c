@@ -105,10 +105,47 @@ static void i2scallback(I2SDriver *i2sp, size_t offset, size_t n)
     chSysUnlockFromISR();
 }
 
+/* Reset the CS43L22 */
+static void cs43l22_reset()
+{
+    palClearPad(GPIOD, GPIOD_RESET);
+    chThdSleep(MS2ST(10));
+    palSetPad(GPIOD, GPIOD_RESET);
+    chThdSleep(MS2ST(10));
+}
+
+/* Reset the CS43L22 */
+static void cs43l22_reconfigure(uint16_t samplerate, uint8_t bitsPerSample)
+{
+	//calc frequency
+	uint16_t prescale;
+	uint32_t pllfreq = STM32_PLLI2SVCO / STM32_PLLI2SR_VALUE;
+	if (bitsPerSample != 16)
+		return;
+
+	// Master clock mode Fs * 256
+	prescale = (pllfreq * 10) / (256 * samplerate) + 5;
+	prescale /= 10;
+	if (prescale > 0xFF || prescale < 2)
+		prescale = 2;
+	i2scfg.i2spr = SPI_I2SPR_MCKOE | (prescale >> 1);
+	if (prescale & 0x01)
+	{
+		i2scfg.i2spr |= SPI_I2SPR_ODD;
+	}
+
+	i2sStart(&I2SD3, &i2scfg);
+}
+
 static CS43L22Driver cs43l22;
 static const CS43L22Config ics43l22cfg =
 {
-CS43L22_ADDR, GPIOD, 4, &I2CD1, &I2SD3, };
+		CS43L22_ADDR,
+		&I2CD1,
+		&I2SD3,
+		cs43l22_reset,
+		cs43l22_reconfigure,
+};
 
 static THD_WORKING_AREA(waThread1, 128);
 static THD_FUNCTION(Thread1, arg)
@@ -187,32 +224,14 @@ int main(void)
      * Starts I2C
      */
     i2cStart(&I2CD1, &i2cfg1);
-    palSetPadMode(GPIOD, 4, PAL_MODE_OUTPUT_PUSHPULL); //RESET
+
+    palSetPadMode(GPIOD, GPIOD_RESET, PAL_MODE_OUTPUT_PUSHPULL); //RESET
+    cs43l22Init();
+    cs43l22ObjectInit(&cs43l22);
 
     /*
      * Starting and configuring the I2S driver 3.
      */
-
-    //calc frequency
-    uint16_t prescale;
-    uint32_t pllfreq = STM32_PLLI2SVCO / STM32_PLLI2SR_VALUE;
-    if (BITS != 16)
-        return;
-
-    // Master clock mode Fs * 256
-    prescale = (pllfreq * 10) / (256 * SAMPLERATE) + 5;
-    prescale /= 10;
-    if (prescale > 0xFF || prescale < 2)
-        prescale = 2;
-    i2scfg.i2spr = SPI_I2SPR_MCKOE | (prescale >> 1);
-    if (prescale & 0x01)
-    {
-        i2scfg.i2spr |= SPI_I2SPR_ODD;
-    }
-
-//    // I2S WS/MCK/SCK/SD pins
-    i2sStart(&I2SD3, &i2scfg);
-
     palSetPadMode(GPIOA , GPIOA_LRCK, PAL_STM32_OSPEED_HIGHEST | PAL_MODE_ALTERNATE(6));
     palSetPadMode(GPIOC , GPIOC_MCLK, PAL_MODE_ALTERNATE(6) |
             PAL_STM32_OSPEED_HIGHEST);
@@ -220,15 +239,14 @@ int main(void)
     palSetPadMode(GPIOC , GPIOC_SDIN, PAL_MODE_ALTERNATE(6) |
             PAL_STM32_OSPEED_HIGHEST);
 
-    cs43l22Init();
-    cs43l22ObjectInit(&cs43l22);
+    cs43l22ConfigureAudio(&cs43l22, SAMPLERATE, BITS);
 
     cs43l22Start(&cs43l22, &ics43l22cfg);
 
     /*prefill buffer*/
     sine(frequency, SAMPLERATE, I2S_BUF_SIZE, i2s_tx_buf);
 
-    i2sStartExchange(&I2SD3);
+    cs43l22StartTransfer(&cs43l22);
     /*
      * Creates the example thread.
      */
