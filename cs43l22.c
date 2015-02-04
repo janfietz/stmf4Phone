@@ -14,6 +14,45 @@
 /*===========================================================================*/
 /* Driver local definitions.                                                 */
 /*===========================================================================*/
+/* Power control 1 */
+#define CS43L22_REG_PWR_CTL1 0x02
+/* Power control 1 - Power up */
+#define CS43L22_PWR1_UP ((uint8_t)0x9e)
+/* Power control 1 - Power down */
+#define CS43L22_PWR1_DOWN ((uint8_t)0x01)
+
+/* Power control 2 */
+#define CS43L22_REG_PWR_CTL2 0x04
+/* Power control 2 - Speaker A - Mask */
+#define CS43L22_PWR2_SPKA_OFFSET 0
+#define CS43L22_PWR2_SPKA_MASK ((uint8_t)0x03)
+
+/* Power control 2 - Speaker B - Mask */
+#define CS43L22_PWR2_SPKB_OFFSET 2
+#define CS43L22_PWR2_SPKB_MASK ((uint8_t)0x0c)
+
+/* Power control 2 - Headphone A - Mask */
+#define CS43L22_PWR2_HDA_OFFSET 4
+#define CS43L22_PWR2_HDA_MASK ((uint8_t)0x30)
+
+/* Power control 2 - Headphone B - Mask */
+#define CS43L22_PWR2_HDB_OFFSET 6
+#define CS43L22_PWR2_HDB_MASK ((uint8_t)0xc0)
+
+/* Master volume control (channel B) */
+#define CS43L22_REG_MASTER_VOLUME_B 0x21
+
+/* Headphone volume control (channel A) */
+#define CS43L22_REG_HP_VOLUME_A 0x22
+
+/* Headphone volume control (channel B) */
+#define CS43L22_REG_HP_VOLUME_B 0x23
+
+/* Speaker volume control (channel A) */
+#define CS43L22_REG_SPK_VOLUME_A 0x24
+
+/* Speaker volume control (channel B) */
+#define CS43L22_REG_SPK_VOLUME_B 0x25
 
 /*===========================================================================*/
 /* Driver exported variables.                                                */
@@ -41,7 +80,7 @@ static msg_t _cs43l22_set(CS43L22Driver *cs43l22p, uint8_t reg , uint8_t value)
     return rv;
 }
 
-static msg_t _cs43l22_get(CS43L22Driver *cs43l22p, uint8_t reg , uint8_t* value)
+static msg_t _cs43l22_get(CS43L22Driver *cs43l22p, uint8_t reg, uint8_t* value)
 {
     msg_t rv = i2cMasterTransmitTimeout(
             cs43l22p->config->ctrlp,
@@ -53,15 +92,23 @@ static msg_t _cs43l22_get(CS43L22Driver *cs43l22p, uint8_t reg , uint8_t* value)
 }
 
 
-void _cs43l22_set_volume(CS43L22Driver *cs43l22p, uint8_t volume )
+void _cs43l22_set_volume(CS43L22Driver *cs43l22p, uint8_t reg_a, uint8_t volume_a, uint8_t reg_b, uint8_t volume_b )
 {
-    if ( volume > 0xe6 ) {
-        volume -= 0xe7;
+    if (volume_a > 0xe6)
+    {
+    	volume_a -= 0xe7;
     } else {
-        volume += 0x19;
+    	volume_a += 0x19;
     }
-    _cs43l22_set(cs43l22p, CS43L22_REG_MASTER_VOLUME_A , volume);
-    _cs43l22_set(cs43l22p, CS43L22_REG_MASTER_VOLUME_B , volume);
+
+    if (volume_b > 0xe6)
+    {
+    	volume_b -= 0xe7;
+	} else {
+		volume_b += 0x19;
+	}
+    _cs43l22_set(cs43l22p, reg_a , volume_a);
+    _cs43l22_set(cs43l22p, reg_b , volume_b);
 }
 
 /*===========================================================================*/
@@ -121,9 +168,8 @@ void cs43l22Start(CS43L22Driver *cs43l22p, const CS43L22Config *config) {
   _cs43l22_get(cs43l22p, CS43L22_REG_GET_ID, &idRegister);
 
   // Activate headphone channels
-  _cs43l22_set(cs43l22p, CS43L22_REG_PWR_CTL2 ,
-          CS43L22_PWR2_SPKA_OFF | CS43L22_PWR2_SPKB_OFF
-          | CS43L22_PWR2_HDA_ON | CS43L22_PWR2_HDB_ON );
+  cs43l22PowerCtrl(cs43l22p, CS43L22_PWR_OFF, CS43L22_PWR_OFF, CS43L22_PWR_ON, CS43L22_PWR_ON);
+
   // Set serial clock
   _cs43l22_set(cs43l22p, CS43L22_REG_CLOCK_CTL , CS43L22_CLK_AUTO_ON
           | CS43L22_CLK_MCDIV_ON );
@@ -142,12 +188,15 @@ void cs43l22Start(CS43L22Driver *cs43l22p, const CS43L22Config *config) {
   // Limiter: no soft ramp/zero cross, no attack level
   _cs43l22_set(cs43l22p, CS43L22_REG_LIM_CTL1 , CS43L22_LIM1_SRD_OFF
           | CS43L22_LIM1_ZCD_OFF );
+
   // Initial volume and tone controls
   _cs43l22_set(cs43l22p, CS43L22_REG_TONE_CTL , 0xf );
   _cs43l22_set(cs43l22p, CS43L22_REG_PCM_A , 0x00 );
   _cs43l22_set(cs43l22p, CS43L22_REG_PCM_B , 0x00 );
 
-  _cs43l22_set_volume(cs43l22p, 200);
+
+  cs43l22MasterVolume(cs43l22p, 200, 200);
+
 
   osalSysLock();
   cs43l22p->state = CS43L22_READY;
@@ -195,6 +244,28 @@ void cs43l22Beep(CS43L22Driver *cs43l22p)
         _cs43l22_set(cs43l22p, CS43L22_REG_BEEP_TONE_CFG , CS43L22_B3_BEEP_CFG_OFF);
         _cs43l22_set(cs43l22p, CS43L22_REG_BEEP_TONE_CFG , CS43L22_B3_BEEP_CFG_SINGLE);
     }
+}
+
+void cs43l22PowerCtrl(CS43L22Driver *cs43l22p, uint8_t spk_a, uint8_t spk_b, uint8_t hd_a, uint8_t hd_b)
+{
+	_cs43l22_set(cs43l22p, CS43L22_REG_PWR_CTL2 ,
+			spk_a << CS43L22_PWR2_SPKA_OFFSET |
+			spk_b << CS43L22_PWR2_SPKA_OFFSET |
+			hd_a << CS43L22_PWR2_HDA_OFFSET |
+			hd_b << CS43L22_PWR2_HDB_OFFSET);
+}
+
+void cs43l22MasterVolume(CS43L22Driver *cs43l22p, uint8_t a, uint8_t b)
+{
+	_cs43l22_set_volume(cs43l22p, CS43L22_REG_MASTER_VOLUME_A, a, CS43L22_REG_MASTER_VOLUME_B, b);
+}
+void cs43l22HeadphoneVolume(CS43L22Driver *cs43l22p, uint8_t a, uint8_t b)
+{
+	_cs43l22_set_volume(cs43l22p, CS43L22_REG_HP_VOLUME_A, a, CS43L22_REG_HP_VOLUME_B, b);
+}
+void cs43l22SpeakerVolume(CS43L22Driver *cs43l22p, uint8_t a, uint8_t b)
+{
+	_cs43l22_set_volume(cs43l22p, CS43L22_REG_SPK_VOLUME_A, a, CS43L22_REG_SPK_VOLUME_B, b);
 }
 
 #endif /* HAL_USE_CS43L22 */

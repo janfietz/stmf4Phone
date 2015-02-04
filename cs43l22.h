@@ -33,55 +33,18 @@
 /* Chip I.D. and revision register - Revision level - B0 */
 #define CS43L22_CHIP_REV_B0 ((uint8_t)0x02)
 
-/* Power control 1 */
-#define CS43L22_REG_PWR_CTL1 0x02
-/* Power control 1 - Power up */
-#define CS43L22_PWR1_UP ((uint8_t)0x9e)
-/* Power control 1 - Power down */
-#define CS43L22_PWR1_DOWN ((uint8_t)0x01)
 
-/* Power control 2 */
-#define CS43L22_REG_PWR_CTL2 0x04
-/* Power control 2 - Speaker A - Mask */
-#define CS43L22_PWR2_SPKA_MASK ((uint8_t)0x03)
+
+
 /* Power control 2 - Speaker A - Enabled if switch high */
-#define CS43L22_PWR2_SPKA_SWHI ((uint8_t)0x01)
+#define CS43L22_PWR_SWHI ((uint8_t)0x01)
 /* Power control 2 - Speaker A - Disabled */
-#define CS43L22_PWR2_SPKA_OFF ((uint8_t)0x03)
+#define CS43L22_PWR_OFF ((uint8_t)0x03)
 /* Power control 2 - Speaker A - Enabled if switch low */
-#define CS43L22_PWR2_SPKA_SWLO ((uint8_t)0x00)
+#define CS43L22_PWR_SWLO ((uint8_t)0x00)
 /* Power control 2 - Speaker A - Enabled */
-#define CS43L22_PWR2_SPKA_ON ((uint8_t)0x02)
-/* Power control 2 - Speaker B - Mask */
-#define CS43L22_PWR2_SPKB_MASK ((uint8_t)0x0c)
-/* Power control 2 - Speaker B - Enabled */
-#define CS43L22_PWR2_SPKB_ON ((uint8_t)0x08)
-/* Power control 2 - Speaker B - Enabled if switch high */
-#define CS43L22_PWR2_SPKB_SWHI ((uint8_t)0x04)
-/* Power control 2 - Speaker B - Enabled if switch low */
-#define CS43L22_PWR2_SPKB_SWLO ((uint8_t)0x00)
-/* Power control 2 - Speaker B - Disabled */
-#define CS43L22_PWR2_SPKB_OFF ((uint8_t)0x0c)
-/* Power control 2 - Headphone A - Mask */
-#define CS43L22_PWR2_HDA_MASK ((uint8_t)0x30)
-/* Power control 2 - Headphone A - Enabled */
-#define CS43L22_PWR2_HDA_ON ((uint8_t)0x20)
-/* Power control 2 - Headphone A - Enabled if switch low */
-#define CS43L22_PWR2_HDA_SWLO ((uint8_t)0x00)
-/* Power control 2 - Headphone A - Enabled if switch high */
-#define CS43L22_PWR2_HDA_SWHI ((uint8_t)0x10)
-/* Power control 2 - Headphone A - Disabled */
-#define CS43L22_PWR2_HDA_OFF ((uint8_t)0x30)
-/* Power control 2 - Headphone B - Mask */
-#define CS43L22_PWR2_HDB_MASK ((uint8_t)0xc0)
-/* Power control 2 - Headphone B - Enabled */
-#define CS43L22_PWR2_HDB_ON ((uint8_t)0x80)
-/* Power control 2 - Headphone B - Enabled if switch high */
-#define CS43L22_PWR2_HDB_SWHI ((uint8_t)0x40)
-/* Power control 2 - Headphone B - Enabled if switch low */
-#define CS43L22_PWR2_HDB_SWLO ((uint8_t)0x00)
-/* Power control 2 - Headphone B - Disabled */
-#define CS43L22_PWR2_HDB_OFF ((uint8_t)0xc0)
+#define CS43L22_PWR_ON ((uint8_t)0x02)
+
 
 /* Clocking control */
 #define CS43L22_REG_CLOCK_CTL 0x05
@@ -392,24 +355,8 @@
 #define CS43L22_TCTL_TREBLE_MASK ((uint8_t)0xf0)
 /* Tone control - Bass gain - Mask */
 #define CS43L22_TCTL_BASS_MASK ((uint8_t)0x0f)
-
 /* Master volume control (channel A) */
 #define CS43L22_REG_MASTER_VOLUME_A 0x20
-
-/* Master volume control (channel B) */
-#define CS43L22_REG_MASTER_VOLUME_B 0x21
-
-/* Headphone volume control (channel A) */
-#define CS43L22_REG_HP_VOLUME_A 0x22
-
-/* Headphone volume control (channel B) */
-#define CS43L22_REG_HP_VOLUME_B 0x23
-
-/* Speaker volume control (channel A) */
-#define CS43L22_REG_SPK_VOLUME_A 0x24
-
-/* Speaker volume control (channel B) */
-#define CS43L22_REG_SPK_VOLUME_B 0x25
 
 /* PCM channel swap */
 #define CS43L22_REG_PCM_SWAP 0x26
@@ -599,6 +546,11 @@ extern "C" {
   void cs43l22ConfigureAudio(CS43L22Driver *cs43l22p, uint16_t samplerate, uint8_t bitsPerSample);
   void cs43l22StartTransfer(CS43L22Driver *cs43l22p);
   void cs43l22StopTransfer(CS43L22Driver *cs43l22p);
+  void cs43l22PowerCtrl(CS43L22Driver *cs43l22p, uint8_t spk_a, uint8_t spk_b, uint8_t hd_a, uint8_t hd_b);
+  void cs43l22MasterVolume(CS43L22Driver *cs43l22p, uint8_t a, uint8_t b);
+  void cs43l22HeadphoneVolume(CS43L22Driver *cs43l22p, uint8_t a, uint8_t b);
+  void cs43l22SpeakerVolume(CS43L22Driver *cs43l22p, uint8_t a, uint8_t b);
+
   void cs43l22Beep(CS43L22Driver *cs43l22p);
 #ifdef __cplusplus
 }
