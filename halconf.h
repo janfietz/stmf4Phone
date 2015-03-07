@@ -104,7 +104,7 @@
  * @brief   Enables the PWM subsystem.
  */
 #if !defined(HAL_USE_PWM) || defined(__DOXYGEN__)
-#define HAL_USE_PWM                 FALSE
+#define HAL_USE_PWM                 TRUE
 #endif
 
 /**
@@ -118,7 +118,7 @@
  * @brief   Enables the SDC subsystem.
  */
 #if !defined(HAL_USE_SDC) || defined(__DOXYGEN__)
-#define HAL_USE_SDC                 FALSE
+#define HAL_USE_SDC                 TRUE
 #endif
 
 /**
@@ -328,6 +328,15 @@
 #if !defined(HAL_USE_CS43L22) || defined(__DOXYGEN__)
 #define HAL_USE_CS43L22                 TRUE
 #endif
+
+/**
+ * @brief   Enables the WS2811 subsystem.
+ */
+#if !defined(HAL_USE_WS2811) || defined(__DOXYGEN__)
+#define HAL_USE_WS2811                 TRUE
+#endif
+
+
 
 #endif /* _HALCONF_H_ */
 
