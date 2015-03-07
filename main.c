@@ -18,6 +18,7 @@
 #include "hal.h"
 #include "test.h"
 #include "cs43l22.h"
+#include "ws2811.h"
 
 #include "float.h"
 #include "math.h"
@@ -34,6 +35,41 @@ static uint16_t frequency = 261;
 static size_t txBufferWriteOffset = 0;
 static size_t txBufferWriteN = 0;
 SEMAPHORE_DECL(txBufferWriteSem, 1);
+
+static ws2811Config ws2811_cfg =
+{
+		2,
+		0b00000010,
+		{72000000 / 90, /* 800Khz PWM clock frequency. 1/90 of PWMC3 */
+		(72000000 / 90) * 0.05, /*Total period is 50ms (20FPS), including sLeds cycles + reset length for ws2812b and FB writes */
+		NULL,
+		{ {PWM_OUTPUT_ACTIVE_HIGH, NULL},
+		{PWM_OUTPUT_DISABLED, NULL},
+		{PWM_OUTPUT_DISABLED, NULL},
+		{PWM_OUTPUT_DISABLED, NULL}},
+		TIM_CR2_MMS_2, /* master mode selection */
+		0, },
+		&PWMD2,
+		{72000000,/* 72Mhz PWM clock frequency. */
+		90, /* 90 cycles period (1.25 uS per period @72Mhz */
+		NULL,
+		{ {PWM_OUTPUT_ACTIVE_HIGH, NULL},
+		{PWM_OUTPUT_ACTIVE_HIGH, NULL},
+		{PWM_OUTPUT_ACTIVE_HIGH, NULL},
+		{PWM_OUTPUT_ACTIVE_HIGH, NULL}},
+		0,
+		0,
+		},
+		&PWMD3,
+		STM32_DMA1_STREAM2,
+		&(GPIOA->BSRR.H.clear),
+		STM32_DMA1_STREAM3,
+		&(GPIOA->BSRR.H.set),
+		STM32_DMA1_STREAM6,
+		&(GPIOA->BSRR.H.clear),
+};
+
+static ws2811Driver ws2811;
 
 static void i2scallback(I2SDriver *i2sp, size_t offset, size_t n);
 
@@ -106,7 +142,7 @@ static void i2scallback(I2SDriver *i2sp, size_t offset, size_t n)
 }
 
 /* Reset the CS43L22 */
-static void cs43l22_reset()
+static void cs43l22_reset(void)
 {
     palClearPad(GPIOD, GPIOD_RESET);
     chThdSleep(MS2ST(10));
@@ -220,6 +256,10 @@ int main(void)
     palSetPadMode(GPIOA, 2, PAL_MODE_ALTERNATE(7));
     palSetPadMode(GPIOA, 3, PAL_MODE_ALTERNATE(7));
 
+    ws2811ObjectInit(&ws2811);
+    palSetGroupMode(GPIOA, ws2811_cfg.mask, 0, PAL_MODE_OUTPUT_PUSHPULL|PAL_STM32_OSPEED_HIGHEST|PAL_STM32_PUDR_FLOATING);
+
+    ws2811Start(&ws2811, &ws2811_cfg);
     /*
      * Starts I2C
      */
