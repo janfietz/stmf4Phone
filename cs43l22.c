@@ -158,7 +158,7 @@ void cs43l22Start(CS43L22Driver *cs43l22p, const CS43L22Config *config) {
 
   osalSysUnlock();
 
-  cs43l22p->config->reset_cb(cs43l22p);
+  cs43l22p->config->reset_cb();
 
   // Make sure the device is powered down
   _cs43l22_set(cs43l22p, CS43L22_REG_PWR_CTL1 , CS43L22_PWR1_DOWN );

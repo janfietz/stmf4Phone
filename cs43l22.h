@@ -490,7 +490,7 @@ typedef struct CS43L22Driver CS43L22Driver;
  * @param[in] offset    offset in buffers of the data to read/write
  * @param[in] n         number of samples to read/write
  */
-typedef void (*cs43l22_reset_callback_t)();
+typedef void (*cs43l22_reset_callback_t)(void);
 
 /**
  * @brief   I2S notification callback type.
