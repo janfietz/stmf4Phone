@@ -38,38 +38,58 @@ SEMAPHORE_DECL(txBufferWriteSem, 1);
 
 static ws2811Config ws2811_cfg =
 {
-		2,
-		0b00000010,
-		{72000000 / 90, /* 800Khz PWM clock frequency. 1/90 of PWMC3 */
-		(72000000 / 90) * 0.05, /*Total period is 50ms (20FPS), including sLeds cycles + reset length for ws2812b and FB writes */
-		NULL,
-		{ {PWM_OUTPUT_ACTIVE_HIGH, NULL},
-		{PWM_OUTPUT_DISABLED, NULL},
-		{PWM_OUTPUT_DISABLED, NULL},
-		{PWM_OUTPUT_DISABLED, NULL}},
-		TIM_CR2_MMS_2, /* master mode selection */
-		0, },
-		&PWMD2,
-		{72000000,/* 72Mhz PWM clock frequency. */
-		90, /* 90 cycles period (1.25 uS per period @72Mhz */
-		NULL,
-		{ {PWM_OUTPUT_ACTIVE_HIGH, NULL},
-		{PWM_OUTPUT_ACTIVE_HIGH, NULL},
-		{PWM_OUTPUT_ACTIVE_HIGH, NULL},
-		{PWM_OUTPUT_ACTIVE_HIGH, NULL}},
-		0,
-		0,
-		},
-		&PWMD3,
-		STM32_DMA1_STREAM2,
-		&(GPIOA->BSRR.H.clear),
-		STM32_DMA1_STREAM3,
-		&(GPIOA->BSRR.H.set),
-		STM32_DMA1_STREAM6,
-		&(GPIOA->BSRR.H.clear),
+        2,
+        0b00000010,
+        {
+                84000000 / 105, /* 800Khz PWM clock frequency. 1/105 of PWMC3 */
+                (84000000 / 105) * 0.05, /*Total period is 50ms (20FPS), including sLeds cycles + reset length for ws2812b and FB writes */
+                NULL,
+                {
+                        { PWM_OUTPUT_ACTIVE_HIGH, NULL },
+                        { PWM_OUTPUT_DISABLED, NULL },
+                        { PWM_OUTPUT_DISABLED, NULL },
+                        { PWM_OUTPUT_DISABLED, NULL }
+                },
+                TIM_CR2_MMS_2, /* master mode selection */
+                0,
+        },
+        &PWMD2,
+        {
+                84000000,/* 72Mhz PWM clock frequency. */
+                105, /* 105 cycles period (1.25 uS per period @72Mhz */
+                NULL,
+                {
+                        { PWM_OUTPUT_ACTIVE_HIGH, NULL },
+                        { PWM_OUTPUT_ACTIVE_HIGH, NULL },
+                        { PWM_OUTPUT_ACTIVE_HIGH, NULL },
+                        { PWM_OUTPUT_ACTIVE_HIGH, NULL } },
+                        0,
+                        0,
+        },
+        &PWMD3,
+        STM32_DMA1_STREAM2,
+        &(GPIOA->BSRR.H.clear),
+        STM32_DMA1_STREAM3,
+        &(GPIOA->BSRR.H.set),
+        STM32_DMA1_STREAM6,
+        &(GPIOA->BSRR.H.clear),
 };
 
 static ws2811Driver ws2811;
+
+static void testLedPattern()
+{
+    int i;
+    struct Color color = {
+            //rand()%256,
+            //rand()%256,
+            //rand()%256
+            1,1,1
+    };
+    for (i=0;i<ws2811_cfg.ledCount;i++){
+        ws2811SetColorRGB(&ws2811, i, color);
+    }
+}
 
 static void i2scallback(I2SDriver *i2sp, size_t offset, size_t n);
 
@@ -203,6 +223,7 @@ static THD_FUNCTION(Thread1, arg)
         frequency = 391;
         chThdSleepMilliseconds(500);
         //cs43l22Beep(&cs43l22);
+        testLedPattern();
     }
 }
 
@@ -279,9 +300,9 @@ int main(void)
     palSetPadMode(GPIOC , GPIOC_SDIN, PAL_MODE_ALTERNATE(6) |
             PAL_STM32_OSPEED_HIGHEST);
 
+    cs43l22Start(&cs43l22, &ics43l22cfg);
     cs43l22ConfigureAudio(&cs43l22, SAMPLERATE, BITS);
 
-    cs43l22Start(&cs43l22, &ics43l22cfg);
 
     /*prefill buffer*/
     sine(frequency, SAMPLERATE, I2S_BUF_SIZE, i2s_tx_buf);
@@ -307,6 +328,7 @@ int main(void)
             {
                 frequency = 100;
             }
+            testLedPattern();
         }
         chThdSleepMilliseconds(500);
     }
