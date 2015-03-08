@@ -102,7 +102,8 @@ CSRC = $(PORTSRC) \
        $(PLATFORMSRC) \
        $(BOARDSRC) \
        main.c \
-       cs43l22.c
+       cs43l22.c \
+       ws2811.c
 
 # C++ sources that can be compiled in ARM or THUMB mode depending on the global
 # setting.
