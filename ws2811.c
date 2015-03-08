@@ -122,17 +122,17 @@ void ws2811Start(ws2811Driver *ws2811p, const ws2811Config *config) {
 	ws2811p->config->pwmSlave->tim->SMCR |= TIM_SMCR_SMS_0 | TIM_SMCR_SMS_2 | TIM_SMCR_TS_0;
 	ws2811p->config->pwmMaster->tim->CR1 &= ~TIM_CR1_CEN;
 	// set pwm values.
-	// 28 (duty in ticks) / 90 (period in ticks) * 1.25uS (period in S) = 0.39 uS
-	pwmEnableChannel(ws2811p->config->pwmSlave, 2, 28);
-	// 58 (duty in ticks) / 90 (period in ticks) * 1.25uS (period in S) = 0.806 uS
-	pwmEnableChannel(ws2811p->config->pwmSlave, 0, 58);
-	// active during transfer of 90 cycles * ws2811p->config->ledCount * 24 bytes * 1/90 multiplier
-	pwmEnableChannel(ws2811p->config->pwmMaster, 0, 90 * ws2811p->config->ledCount * 24 / 90);
+	// 51 (duty in ticks) / 105 (period in ticks) * 1.25uS (period in S) = 0.39 uS
+	pwmEnableChannel(ws2811p->config->pwmSlave, 2, 51);
+	// 105 (duty in ticks) / 105 (period in ticks) * 1.25uS (period in S) = 0.806 uS
+	pwmEnableChannel(ws2811p->config->pwmSlave, 0, 105);
+	// active during transfer of 105 cycles * ws2811p->config->ledCount * 24 bytes * 1/105 multiplier
+	pwmEnableChannel(ws2811p->config->pwmMaster, 0, 105 * ws2811p->config->ledCount * 24 / 105);
 	// stop and reset counters for synchronization
 	ws2811p->config->pwmMaster->tim->CNT = 0;
 	// Slave (TIM3) needs to "update" immediately after master (TIM2) start in order to start in sync.
 	// this initial sync is crucial for the stability of the run
-	ws2811p->config->pwmSlave->tim->CNT = 89;
+	ws2811p->config->pwmSlave->tim->CNT = 104;
 	ws2811p->config->pwmSlave->tim->DIER |= TIM_DIER_CC3DE | TIM_DIER_CC1DE | TIM_DIER_UDE;
 	dmaStreamEnable(ws2811p->config->dmaStreamReset);
 	dmaStreamEnable(ws2811p->config->dmaStreamOne);
@@ -143,7 +143,7 @@ void ws2811Start(ws2811Driver *ws2811p, const ws2811Config *config) {
 	ws2811p->config->pwmMaster->tim->CR1 |= TIM_CR1_CEN;
 
 	osalSysLock();
-	ws2811p->state = WS2811_READY;
+	ws2811p->state = WS2811_ACTIVE;
 	osalSysUnlock();
 }
 
@@ -166,6 +166,26 @@ void ws2811Stop(ws2811Driver *ws2811p) {
 	osalSysUnlock();
 }
 
+void ws2811SetColorRGB(ws2811Driver *ws2811p, int ledNum, struct Color color)
+{
+    osalDbgCheck(ws2811p != NULL);
+    osalSysLock();
+    osalDbgAssert((ws2811p->state == WS2811_ACTIVE), "invalid state");
+    osalSysUnlock();
+
+    osalDbgCheck(ledNum < ws2811p->config->ledCount);
+
+    uint8_t *ledBuffer = ws2811p->framebuffer + 24 * ledNum;
+    int i;
+    for (i=0;i<8;i++)
+    {
+        ledBuffer = ((color.G << i) &0b10000000 ? 0x0:ws2811p->config->mask);
+        ledBuffer[8] = ((color.R << i) &0b10000000 ? 0x0:ws2811p->config->mask);
+        ledBuffer[16] = ((color.B << i) &0b10000000 ? 0x0:ws2811p->config->mask);
+        ledBuffer++;
+    }
+
+}
 #endif /* HAL_USE_WS2811 */
 
 /** @} */
