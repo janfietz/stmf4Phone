@@ -87,7 +87,7 @@ static void testLedPattern()
             1,1,1
     };
     for (i=0;i<ws2811_cfg.ledCount;i++){
-        ws2811SetColorRGB(&ws2811, i, color);
+        ws2811SetColorRGB(&ws2811, i, &color);
     }
 }
 

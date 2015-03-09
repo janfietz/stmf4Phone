@@ -166,7 +166,7 @@ void ws2811Stop(ws2811Driver *ws2811p) {
 	osalSysUnlock();
 }
 
-void ws2811SetColorRGB(ws2811Driver *ws2811p, int ledNum, struct Color color)
+void ws2811SetColorRGB(ws2811Driver *ws2811p, int ledNum, struct Color *color)
 {
     osalDbgCheck(ws2811p != NULL);
     osalSysLock();
@@ -175,13 +175,13 @@ void ws2811SetColorRGB(ws2811Driver *ws2811p, int ledNum, struct Color color)
 
     osalDbgCheck(ledNum < ws2811p->config->ledCount);
 
-    uint8_t *ledBuffer = ws2811p->framebuffer + 24 * ledNum;
+    uint8_t *ledBuffer = ws2811p->framebuffer + (24 * ledNum);
     int i;
-    for (i=0;i<8;i++)
+    for (i=0; i<8; i++)
     {
-        ledBuffer = ((color.G << i) &0b10000000 ? 0x0:ws2811p->config->mask);
-        ledBuffer[8] = ((color.R << i) &0b10000000 ? 0x0:ws2811p->config->mask);
-        ledBuffer[16] = ((color.B << i) &0b10000000 ? 0x0:ws2811p->config->mask);
+        ledBuffer[0] = ((color->G << i) & 0b10000000 ? 0x0 : ws2811p->config->mask);
+        ledBuffer[8] = ((color->R << i) & 0b10000000 ? 0x0 : ws2811p->config->mask);
+        ledBuffer[16] = ((color->B << i) & 0b10000000 ? 0x0 : ws2811p->config->mask);
         ledBuffer++;
     }
 
