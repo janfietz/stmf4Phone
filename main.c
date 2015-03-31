@@ -27,6 +27,7 @@
 #define CS43L22_ADDR 0x4a
 #define SAMPLERATE 44100
 #define BITS 16
+#define LEDCOUNT 4
 
 static int16_t i2s_tx_buf[I2S_BUF_SIZE];
 static int16_t sineTable[SAMPLERATE];
@@ -39,22 +40,8 @@ SEMAPHORE_DECL(txBufferWriteSem, 1);
 static ws2811Driver ws2811;
 static ws2811Config ws2811_cfg =
 {
-    2,
+    LEDCOUNT,
     0b00000010,
-    {
-        168000000 / 2 / 210,
-        (168000000 / 2 / 210) * 0.05,
-        NULL,
-        {
-            { PWM_OUTPUT_ACTIVE_HIGH, NULL },
-            { PWM_OUTPUT_DISABLED, NULL },
-            { PWM_OUTPUT_DISABLED, NULL },
-            { PWM_OUTPUT_DISABLED, NULL }
-        },
-        TIM_CR2_MMS_2, /* master mode selection */
-        0,
-    },
-    &PWMD2,
     {
         168000000 / 2,
         210,
@@ -74,18 +61,22 @@ static ws2811Config ws2811_cfg =
     STM32_DMA2_STREAM6,
 };
 
+struct Color colors[LEDCOUNT];
 static void testLedPattern()
 {
     int i;
-    for (i=0;i<ws2811_cfg.ledCount;i++)
+    for (i = ws2811_cfg.ledCount - 1; i > 0; i--)
     {
-        struct Color color = {
-                rand()%256,
-                rand()%256,
-                rand()%256
-        };
-        ws2811SetColor(&ws2811, i, &color);
+        colors[i].R = colors[i-1].R;
+        colors[i].G = colors[i-1].G;
+        colors[i].B = colors[i-1].B;
+        ws2811SetColor(&ws2811, i, &colors[i]);
     }
+    colors[0].R = rand()%256;
+    colors[0].G = rand()%256;
+    colors[0].B = rand()%256;
+    ws2811SetColor(&ws2811, 0, &colors[0]);
+    ws2811Update(&ws2811);
 }
 
 static void i2scallback(I2SDriver *i2sp, size_t offset, size_t n);
@@ -251,6 +242,7 @@ static THD_FUNCTION(ThreadPlayer, arg)
 /*
  * Application entry point.
  */
+
 int main(void)
 {
 
@@ -284,8 +276,12 @@ int main(void)
     int i = 0;
     for (i=0;i<ws2811_cfg.ledCount;i++)
     {
-        ws2811SetColor(&ws2811, i, &color);
+        colors[i].R = color.R;
+        colors[i].G = color.G;
+        colors[i].B = color.B;
+        ws2811SetColor(&ws2811, i, &colors[i]);
     }
+    ws2811Update(&ws2811);
     palSetGroupMode(GPIOA, 0b00000010, 0, PAL_MODE_OUTPUT_PUSHPULL|PAL_STM32_OSPEED_HIGHEST|PAL_STM32_PUDR_FLOATING);
 
     /*
@@ -329,10 +325,10 @@ int main(void)
      */
     while (TRUE)
     {
-        if (palReadPad(GPIOA, GPIOA_BUTTON))
+        //if (palReadPad(GPIOA, GPIOA_BUTTON))
         {
             testLedPattern();
         }
-        chThdSleepMilliseconds(500);
+        chThdSleepMilliseconds(100);
     }
 }
