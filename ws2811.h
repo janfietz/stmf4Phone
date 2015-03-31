@@ -51,24 +51,22 @@ typedef enum {
  */
 typedef struct ws2811Driver ws2811Driver;
 
-
+typedef void (*ws2811_setpad_callback_t)(void);
+typedef void (*ws2811_clearpad_callback_t)(void);
 /**
  * @brief   Driver configuration structure.
  * @note    It could be empty on some architectures.
  */
 typedef struct {
   uint16_t ledCount;
-  uint32_t mask;
+  uint8_t portmask;
   PWMConfig pwmMasterConfig;
   PWMDriver *pwmMaster;
   PWMConfig pwmSlaveConfig;
   PWMDriver *pwmSlave;
-  stm32_dma_stream_t *dmaStreamZero;
-  void* dmaStreamZero_periphal;
-  stm32_dma_stream_t *dmaStreamOne;
-  void* dmaStreamOne_periphal;
-  stm32_dma_stream_t *dmaStreamReset;
-  void* dmaStreamReset_periphal;
+  stm32_dma_stream_t *dmastp_reset;
+  stm32_dma_stream_t *dmastp_one;
+  stm32_dma_stream_t *dmastp_zero;
 } ws2811Config;
 
 
@@ -85,7 +83,6 @@ struct ws2811Driver {
    */
   const ws2811Config           *config;
   /* End of the mandatory fields.*/
-
   uint8_t dma_source;
   uint8_t *framebuffer;
 };
@@ -104,7 +101,7 @@ extern "C" {
   void ws2811ObjectInit(ws2811Driver *ws2811p);
   void ws2811Start(ws2811Driver *ws2811p, const ws2811Config *config);
   void ws2811Stop(ws2811Driver *ws2811p);
-  void ws2811SetColorRGB(ws2811Driver *ws2811p, int ledNum, struct Color *color);
+  void ws2811SetColor(ws2811Driver *ws2811p, int ledNum, struct Color *color);
 #ifdef __cplusplus
 }
 #endif

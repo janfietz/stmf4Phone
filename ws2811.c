@@ -63,6 +63,7 @@ void ws2811ObjectInit(ws2811Driver *ws2811p) {
  *
  * @api
  */
+
 void ws2811Start(ws2811Driver *ws2811p, const ws2811Config *config) {
 
 	osalDbgCheck((ws2811p != NULL) && (config != NULL));
@@ -74,73 +75,87 @@ void ws2811Start(ws2811Driver *ws2811p, const ws2811Config *config) {
 
 	osalSysUnlock();
 
-	// configure pwm timers -
-	// timer 2 as master, active for data transmission and inactive to disable transmission during reset period (50uS)
-	// timer 3 as slave, during active time creates a 1.25 uS signal, with duty cycle controlled by frame buffer values
-
 	ws2811p->framebuffer = chHeapAlloc(NULL, ((ws2811p->config->ledCount) * 24)+10);
-
 	int j;
 	for (j = 0; j < (ws2811p->config->ledCount) * 24; j++)
-	ws2811p->framebuffer[j] = 0;
+	{
+	    ws2811p->framebuffer[j] = 0;
+	}
 
-	ws2811p->dma_source = ws2811p->config->mask;
+	ws2811p->dma_source = config->portmask;
 
-	// DMA stream 2, triggered by channel3 pwm signal. if FB indicates, reset output value early to indicate "0" bit to ws2812
-	dmaStreamAllocate(ws2811p->config->dmaStreamZero, 10, NULL, NULL);
-	dmaStreamSetPeripheral(ws2811p->config->dmaStreamZero, ws2811p->config->dmaStreamZero_periphal);
-	dmaStreamSetMemory0(ws2811p->config->dmaStreamZero, ws2811p->framebuffer);
-	dmaStreamSetTransactionSize(ws2811p->config->dmaStreamZero, (ws2811p->config->ledCount) * 24);
-	dmaStreamSetMode(
-			ws2811p->config->dmaStreamZero,
-			STM32_DMA_CR_DIR_M2P | STM32_DMA_CR_MINC | STM32_DMA_CR_PSIZE_BYTE
-			| STM32_DMA_CR_MSIZE_BYTE | STM32_DMA_CR_CIRC | STM32_DMA_CR_PL(2));
-	// DMA stream 3, triggered by pwm update event. output high at beginning of signal
-	dmaStreamAllocate(ws2811p->config->dmaStreamReset, 10, NULL, NULL);
-	dmaStreamSetPeripheral(ws2811p->config->dmaStreamReset, ws2811p->config->dmaStreamReset_periphal);
-	dmaStreamSetMemory0(ws2811p->config->dmaStreamReset, &ws2811p->dma_source);
-	dmaStreamSetTransactionSize(ws2811p->config->dmaStreamReset, 1);
-	dmaStreamSetMode(
-			ws2811p->config->dmaStreamReset, STM32_DMA_CR_TEIE |
-			STM32_DMA_CR_DIR_M2P | STM32_DMA_CR_PSIZE_BYTE | STM32_DMA_CR_MSIZE_BYTE
-			| STM32_DMA_CR_CIRC | STM32_DMA_CR_PL(3));
-  
-	// DMA stream 6, triggered by channel1 update event. reset output value late to indicate "1" bit to ws2812.
-	// always triggers but no affect if dma stream 2 already change output value to 0
-	dmaStreamAllocate(ws2811p->config->dmaStreamOne, 10, NULL, NULL);
-	dmaStreamSetPeripheral(ws2811p->config->dmaStreamOne, ws2811p->config->dmaStreamOne_periphal);
-	dmaStreamSetMemory0(ws2811p->config->dmaStreamOne, &ws2811p->dma_source);
-	dmaStreamSetTransactionSize(ws2811p->config->dmaStreamOne, 1);
-	dmaStreamSetMode(
-			ws2811p->config->dmaStreamOne,
-			STM32_DMA_CR_DIR_M2P | STM32_DMA_CR_PSIZE_BYTE | STM32_DMA_CR_MSIZE_BYTE
-			| STM32_DMA_CR_CIRC | STM32_DMA_CR_PL(3));
+   dmaStreamAllocate(ws2811p->config->dmastp_reset, 10,
+           NULL,
+           NULL);
+   dmaStreamSetPeripheral(ws2811p->config->dmastp_reset, &(GPIOA->BSRR.H.set));
+   dmaStreamSetMemory0(ws2811p->config->dmastp_reset, &ws2811p->dma_source);
+   dmaStreamSetTransactionSize(ws2811p->config->dmastp_reset, 1);
+   dmaStreamSetMode(ws2811p->config->dmastp_reset,
+           STM32_DMA_CR_TEIE |
+           STM32_DMA_CR_TCIE |
+           STM32_DMA_CR_DIR_M2P |
+           STM32_DMA_CR_PSIZE_BYTE |
+           STM32_DMA_CR_MSIZE_BYTE |
+           STM32_DMA_CR_CIRC |
+           STM32_DMA_CR_PL(3) |
+           STM32_DMA_CR_CHSEL(6));
 
-	pwmStart(ws2811p->config->pwmMaster, &ws2811p->config->pwmMasterConfig);
-	pwmStart(ws2811p->config->pwmSlave, &ws2811p->config->pwmSlaveConfig);
-	// set pwm3 as slave, triggerd by pwm2 oc1 event. disables pwmd2 for synchronization.
-	ws2811p->config->pwmSlave->tim->SMCR |= TIM_SMCR_SMS_0 | TIM_SMCR_SMS_2 | TIM_SMCR_TS_0;
-	ws2811p->config->pwmMaster->tim->CR1 &= ~TIM_CR1_CEN;
+    dmaStreamAllocate(ws2811p->config->dmastp_zero, 10,
+            NULL,
+            NULL);
+    dmaStreamSetPeripheral(ws2811p->config->dmastp_zero, &(GPIOA->BSRR.H.clear));
+    dmaStreamSetMemory0(ws2811p->config->dmastp_zero, ws2811p->framebuffer);
+    dmaStreamSetTransactionSize(ws2811p->config->dmastp_zero, (ws2811p->config->ledCount) * 24);
+    dmaStreamSetMode(ws2811p->config->dmastp_zero,
+            STM32_DMA_CR_TCIE |
+             STM32_DMA_CR_DIR_M2P |
+             STM32_DMA_CR_MINC |
+             STM32_DMA_CR_PSIZE_BYTE |
+             STM32_DMA_CR_MSIZE_BYTE |
+             STM32_DMA_CR_CIRC |
+             STM32_DMA_CR_PL(2) |
+             STM32_DMA_CR_CHSEL(6));
+
+   dmaStreamAllocate(ws2811p->config->dmastp_one, 10,
+           NULL,
+           NULL);
+   dmaStreamSetPeripheral(ws2811p->config->dmastp_one, &(GPIOA->BSRR.H.clear));
+   dmaStreamSetMemory0(ws2811p->config->dmastp_one, &ws2811p->dma_source);
+   dmaStreamSetTransactionSize(ws2811p->config->dmastp_one, 1);
+   dmaStreamSetMode(ws2811p->config->dmastp_one,
+           STM32_DMA_CR_TEIE |
+           STM32_DMA_CR_TCIE |
+           STM32_DMA_CR_DIR_M2P |
+           STM32_DMA_CR_PSIZE_BYTE |
+           STM32_DMA_CR_MSIZE_BYTE |
+           STM32_DMA_CR_CIRC |
+           STM32_DMA_CR_PL(3) |
+           STM32_DMA_CR_CHSEL(6));
+
+    pwmStart(ws2811p->config->pwmMaster, &ws2811p->config->pwmMasterConfig);
+    pwmStart(ws2811p->config->pwmSlave, &ws2811p->config->pwmSlaveConfig);
+
+    // set pwm3 as slave, triggerd by pwm2 oc1 event. disables pwmd2 for synchronization.
+    ws2811p->config->pwmSlave->tim->SMCR |= TIM_SMCR_SMS_0 | TIM_SMCR_SMS_2 | TIM_SMCR_TS_0;
+    ws2811p->config->pwmMaster->tim->CR1 &= ~TIM_CR1_CEN;
+
 	// set pwm values.
-	// 51 (duty in ticks) / 105 (period in ticks) * 1.25uS (period in S) = 0.39 uS
-	pwmEnableChannel(ws2811p->config->pwmSlave, 2, 51);
-	// 105 (duty in ticks) / 105 (period in ticks) * 1.25uS (period in S) = 0.806 uS
-	pwmEnableChannel(ws2811p->config->pwmSlave, 0, 105);
-	// active during transfer of 105 cycles * ws2811p->config->ledCount * 24 bytes * 1/105 multiplier
-	pwmEnableChannel(ws2811p->config->pwmMaster, 0, 105 * ws2811p->config->ledCount * 24 / 105);
-	// stop and reset counters for synchronization
-	ws2811p->config->pwmMaster->tim->CNT = 0;
-	// Slave (TIM3) needs to "update" immediately after master (TIM2) start in order to start in sync.
-	// this initial sync is crucial for the stability of the run
-	ws2811p->config->pwmSlave->tim->CNT = 104;
-	ws2811p->config->pwmSlave->tim->DIER |= TIM_DIER_CC3DE | TIM_DIER_CC1DE | TIM_DIER_UDE;
-	dmaStreamEnable(ws2811p->config->dmaStreamReset);
-	dmaStreamEnable(ws2811p->config->dmaStreamOne);
-	dmaStreamEnable(ws2811p->config->dmaStreamZero);
-	// all systems go! both timers and all channels are configured to resonate
-	// in complete sync without any need for CPU cycles (only DMA and timers)
-	// start pwm2 for system to start resonating
-	ws2811p->config->pwmMaster->tim->CR1 |= TIM_CR1_CEN;
+	pwmEnableChannel(ws2811p->config->pwmSlave, 0, 100);
+	pwmEnableChannel(ws2811p->config->pwmSlave, 2, 41);
+
+    pwmEnableChannel(ws2811p->config->pwmMaster, 0, 210 * (ws2811p->config->ledCount) * 24 / 210);
+
+    // stop and reset counters for synchronization
+    ws2811p->config->pwmMaster->tim->CNT = 0;
+
+    ws2811p->config->pwmSlave->tim->CNT = 209;
+
+
+    dmaStreamEnable(ws2811p->config->dmastp_reset);
+    dmaStreamEnable(ws2811p->config->dmastp_one);
+    dmaStreamEnable(ws2811p->config->dmastp_zero);
+
+    ws2811p->config->pwmMaster->tim->CR1 |= TIM_CR1_CEN;
 
 	osalSysLock();
 	ws2811p->state = WS2811_ACTIVE;
@@ -166,7 +181,7 @@ void ws2811Stop(ws2811Driver *ws2811p) {
 	osalSysUnlock();
 }
 
-void ws2811SetColorRGB(ws2811Driver *ws2811p, int ledNum, struct Color *color)
+void ws2811SetColor(ws2811Driver *ws2811p, int ledNum, struct Color *color)
 {
     osalDbgCheck(ws2811p != NULL);
     osalSysLock();
@@ -179,13 +194,13 @@ void ws2811SetColorRGB(ws2811Driver *ws2811p, int ledNum, struct Color *color)
     int i;
     for (i=0; i<8; i++)
     {
-        ledBuffer[0] = ((color->G << i) & 0b10000000 ? 0x0 : ws2811p->config->mask);
-        ledBuffer[8] = ((color->R << i) & 0b10000000 ? 0x0 : ws2811p->config->mask);
-        ledBuffer[16] = ((color->B << i) & 0b10000000 ? 0x0 : ws2811p->config->mask);
+        ledBuffer[0] = ((color->R << i) & 0b10000000 ? 0 : ws2811p->config->portmask);
+        ledBuffer[8] = ((color->G << i) & 0b10000000 ?  0 : ws2811p->config->portmask);
+        ledBuffer[16] = ((color->B << i) & 0b10000000 ?  0 : ws2811p->config->portmask);
         ledBuffer++;
     }
-
 }
+
 #endif /* HAL_USE_WS2811 */
 
 /** @} */
