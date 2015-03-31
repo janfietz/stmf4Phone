@@ -20,7 +20,12 @@
 /*===========================================================================*/
 /* Driver pre-compile time settings.                                         */
 /*===========================================================================*/
-
+/**
+ * @brief   WS2811 interrupt priority level setting.
+ */
+#if !defined(WS2811_IRQ_PRIORITY) || defined(__DOXYGEN__)
+#define WS2811_IRQ_PRIORITY         10
+#endif
 
 /*===========================================================================*/
 /* Derived constants and error checks.                                       */
@@ -50,9 +55,6 @@ typedef enum {
  * @brief   Type of a structure representing an ws2811Driver driver.
  */
 typedef struct ws2811Driver ws2811Driver;
-
-typedef void (*ws2811_setpad_callback_t)(void);
-typedef void (*ws2811_clearpad_callback_t)(void);
 /**
  * @brief   Driver configuration structure.
  * @note    It could be empty on some architectures.
@@ -60,10 +62,8 @@ typedef void (*ws2811_clearpad_callback_t)(void);
 typedef struct {
   uint16_t ledCount;
   uint8_t portmask;
-  PWMConfig pwmMasterConfig;
-  PWMDriver *pwmMaster;
-  PWMConfig pwmSlaveConfig;
-  PWMDriver *pwmSlave;
+  PWMConfig pwmConfig;
+  PWMDriver *pwmd;
   stm32_dma_stream_t *dmastp_reset;
   stm32_dma_stream_t *dmastp_one;
   stm32_dma_stream_t *dmastp_zero;
@@ -83,7 +83,7 @@ struct ws2811Driver {
    */
   const ws2811Config           *config;
   /* End of the mandatory fields.*/
-  uint8_t dma_source;
+  uint8_t *dma_source;
   uint8_t *framebuffer;
 };
 /*===========================================================================*/
@@ -102,6 +102,7 @@ extern "C" {
   void ws2811Start(ws2811Driver *ws2811p, const ws2811Config *config);
   void ws2811Stop(ws2811Driver *ws2811p);
   void ws2811SetColor(ws2811Driver *ws2811p, int ledNum, struct Color *color);
+  void ws2811Update(ws2811Driver *ws2811p);
 #ifdef __cplusplus
 }
 #endif
