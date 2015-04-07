@@ -42,6 +42,25 @@ static ws2811Config ws2811_cfg =
 {
     LEDCOUNT,
     0b00000010,
+    (uint32_t)(&(GPIOA->BSRR.H.set)),
+    (uint32_t)(&(GPIOA->BSRR.H.clear)),
+    210,
+    41,
+    100,
+    {
+        168000000 / 2 / 210,
+        (LEDCOUNT * 24) + 20,
+        NULL,
+        {
+            { PWM_OUTPUT_ACTIVE_HIGH, NULL },
+            { PWM_OUTPUT_DISABLED, NULL },
+            { PWM_OUTPUT_DISABLED, NULL },
+            { PWM_OUTPUT_DISABLED, NULL }
+        },
+        TIM_CR2_MMS_2, /* master mode selection */
+        0,
+    },
+    &PWMD2,
     {
         168000000 / 2,
         210,
@@ -72,10 +91,74 @@ static void testLedPattern()
         colors[i].B = colors[i-1].B;
         ws2811SetColor(&ws2811, i, &colors[i]);
     }
-    colors[0].R = rand()%256;
-    colors[0].G = rand()%256;
-    colors[0].B = rand()%256;
-    ws2811SetColor(&ws2811, 0, &colors[0]);
+    colors[0].R = rand() % 256;
+    colors[0].G = rand() % 256;
+    colors[0].B = rand() % 256;
+
+   ws2811SetColor(&ws2811, 0, &colors[0]);
+    ws2811Update(&ws2811);
+}
+static int ledpos = 0;
+static int traildir = 1;
+struct Color trailcolors[4];
+static void testLedPattern2()
+{
+    if (ledpos == -4)
+    {
+        struct Color curcolor = {rand() % 256, rand() % 256 , rand() % 256};
+        /* generate new random color */
+        int i;
+        for (i = 0; i < 4; i++)
+        {
+            trailcolors[i].R = curcolor.R / (i + 1);
+            trailcolors[i].G = curcolor.G / (i + 1);
+            trailcolors[i].B = curcolor.B / (i + 1);
+        }
+    }
+
+    /* delete last led */
+    struct Color black = {0,0,0};
+    int i;
+    for (i = ws2811_cfg.ledCount - 1; i >= 0; i--)
+    {
+        ws2811SetColor(&ws2811, i, &black);
+    }
+
+    if (ledpos >= (ws2811_cfg.ledCount + 4))
+    {
+        traildir = traildir * -1;
+        ledpos = ws2811_cfg.ledCount - 1;
+    }
+    else if (ledpos == -4)
+    {
+        traildir = traildir * -1;
+        ledpos = 0;
+    }
+    else
+    {
+        ledpos = ledpos + traildir;
+    }
+
+    /* set trail */
+    for (i = 0; i < 4; i++)
+    {
+        int pos = ledpos - (traildir * i);
+        if ((pos >= 0) && (pos < (ws2811_cfg.ledCount)))
+        {
+            ws2811SetColor(&ws2811, pos, &trailcolors[i]);
+        }
+    }
+
+    /* set end points */
+    if (ledpos >= ws2811_cfg.ledCount - 1)
+    {
+        ws2811SetColor(&ws2811, ws2811_cfg.ledCount - 1, &trailcolors[0]);
+    }
+    else if (ledpos < 0)
+    {
+        ws2811SetColor(&ws2811, 0, &trailcolors[0]);
+    }
+
     ws2811Update(&ws2811);
 }
 
@@ -270,6 +353,7 @@ int main(void)
      */
     ws2811ObjectInit(&ws2811);
     ws2811Start(&ws2811, &ws2811_cfg);
+    palSetGroupMode(GPIOA, 0b00000010, 0, PAL_MODE_OUTPUT_PUSHPULL|PAL_STM32_OSPEED_HIGHEST|PAL_STM32_PUDR_FLOATING);
 
     /* set color to all leds */
     struct Color color = {255, 0, 0};
@@ -282,7 +366,6 @@ int main(void)
         ws2811SetColor(&ws2811, i, &colors[i]);
     }
     ws2811Update(&ws2811);
-    palSetGroupMode(GPIOA, 0b00000010, 0, PAL_MODE_OUTPUT_PUSHPULL|PAL_STM32_OSPEED_HIGHEST|PAL_STM32_PUDR_FLOATING);
 
     /*
      * Starts I2C
@@ -325,10 +408,15 @@ int main(void)
      */
     while (TRUE)
     {
-        //if (palReadPad(GPIOA, GPIOA_BUTTON))
+        if (palReadPad(GPIOA, GPIOA_BUTTON))
+        {
+            testLedPattern2();
+            chThdSleepMilliseconds(50);
+        }
+        else
         {
             testLedPattern();
+            chThdSleepMilliseconds(100);
         }
-        chThdSleepMilliseconds(100);
     }
 }
