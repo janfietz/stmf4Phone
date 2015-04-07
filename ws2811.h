@@ -62,6 +62,13 @@ typedef struct ws2811Driver ws2811Driver;
 typedef struct {
   uint16_t ledCount;
   uint8_t portmask;
+  uint32_t periphalset;
+  uint32_t periphalclear;
+  uint32_t bitwidth;
+  uint32_t zerowidth;
+  uint32_t onewidth;
+  PWMConfig pwmMasterConfig;
+  PWMDriver *pwmMaster;
   PWMConfig pwmConfig;
   PWMDriver *pwmd;
   stm32_dma_stream_t *dmastp_reset;
@@ -83,8 +90,11 @@ struct ws2811Driver {
    */
   const ws2811Config           *config;
   /* End of the mandatory fields.*/
-  uint8_t *dma_source;
+  uint8_t dma_source;
   uint8_t *framebuffer;
+  struct Color* colors;
+  bool updateframebuffer;
+  binary_semaphore_t bsemUpdateFrame;
 };
 /*===========================================================================*/
 /* Driver macros.                                                            */
