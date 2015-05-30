@@ -20,8 +20,17 @@
 #include "cs43l22.h"
 #include "ws2811.h"
 
+#include "chprintf.h"
+#include "shell.h"
+
 #include "float.h"
 #include "math.h"
+
+#include "usbcfg.h"
+
+/* Virtual serial port over USB.*/
+SerialUSBDriver SDU1;
+
 
 #define I2S_BUF_SIZE            512
 #define CS43L22_ADDR 0x4a
@@ -322,12 +331,79 @@ static THD_FUNCTION(ThreadPlayer, arg)
     }
 }
 
+#define SHELL_WA_SIZE   THD_WORKING_AREA_SIZE(2048)
+#define TEST_WA_SIZE    THD_WORKING_AREA_SIZE(256)
+
+static void cmd_mem(BaseSequentialStream *chp, int argc, char *argv[]) {
+  size_t n, size;
+
+  (void)argv;
+  if (argc > 0) {
+    chprintf(chp, "Usage: mem\r\n");
+    return;
+  }
+  n = chHeapStatus(NULL, &size);
+  chprintf(chp, "core free memory : %u bytes\r\n", chCoreGetStatusX());
+  chprintf(chp, "heap fragments   : %u\r\n", n);
+  chprintf(chp, "heap free total  : %u bytes\r\n", size);
+}
+
+static void cmd_threads(BaseSequentialStream *chp, int argc, char *argv[]) {
+  static const char *states[] = {CH_STATE_NAMES};
+  thread_t *tp;
+
+  (void)argv;
+  if (argc > 0) {
+    chprintf(chp, "Usage: threads\r\n");
+    return;
+  }
+  chprintf(chp, "    addr    stack prio refs     state\r\n");
+  tp = chRegFirstThread();
+  do {
+    chprintf(chp, "%08lx %08lx %4lu %4lu %9s\r\n",
+             (uint32_t)tp, (uint32_t)tp->p_ctx.r13,
+             (uint32_t)tp->p_prio, (uint32_t)(tp->p_refs - 1),
+             states[tp->p_state]);
+    tp = chRegNextThread(tp);
+  } while (tp != NULL);
+}
+
+static void cmd_test(BaseSequentialStream *chp, int argc, char *argv[]) {
+  thread_t *tp;
+
+  (void)argv;
+  if (argc > 0) {
+    chprintf(chp, "Usage: test\r\n");
+    return;
+  }
+  tp = chThdCreateFromHeap(NULL, TEST_WA_SIZE, chThdGetPriorityX(),
+                           TestThread, chp);
+  if (tp == NULL) {
+    chprintf(chp, "out of memory\r\n");
+    return;
+  }
+  chThdWait(tp);
+}
+
+static const ShellCommand commands[] = {
+  {"mem", cmd_mem},
+  {"threads", cmd_threads},
+  {"test", cmd_test},
+  {NULL, NULL}
+};
+
+static const ShellConfig shell_cfg1 = {
+  (BaseSequentialStream *)&SDU1,
+  commands
+};
+
 /*
  * Application entry point.
  */
 
 int main(void)
 {
+    thread_t *shelltp = NULL;
 
     /*
      * System initializations.
@@ -340,6 +416,28 @@ int main(void)
     chSysInit();
 
     precalcSine(SAMPLERATE, sineTable);
+
+    /*
+     * Shell manager initialization.
+     */
+    shellInit();
+
+    /*
+     * Initializes a serial-over-USB CDC driver.
+     */
+    sduObjectInit(&SDU1);
+    sduStart(&SDU1, &serusbcfg);
+
+    /*
+     * Activates the USB driver and then the USB bus pull-up on D+.
+     * Note, a delay is inserted in order to not have to disconnect the cable
+     * after a reset.
+     */
+    usbDisconnectBus(serusbcfg.usbp);
+    chThdSleepMilliseconds(1000);
+    usbStart(serusbcfg.usbp, &usbcfg);
+    usbConnectBus(serusbcfg.usbp);
+
     /*
      * Activates the serial driver 2 using the driver default configuration.
      * PA2(TX) and PA3(RX) are routed to USART2.
@@ -408,15 +506,31 @@ int main(void)
      */
     while (TRUE)
     {
-        if (palReadPad(GPIOA, GPIOA_BUTTON))
-        {
-            testLedPattern2();
-            chThdSleepMilliseconds(50);
+//        if (palReadPad(GPIOA, GPIOA_BUTTON))
+//        {
+//            testLedPattern2();
+//            chThdSleepMilliseconds(50);
+//        }
+//        else
+//        {
+//            testLedPattern();
+//            chThdSleepMilliseconds(100);
+//        }
+
+        if (!shelltp) {
+          if (SDU1.config->usbp->state == USB_ACTIVE) {
+            /* Spawns a new shell.*/
+            shelltp = shellCreate(&shell_cfg1, SHELL_WA_SIZE, NORMALPRIO);
+          }
         }
-        else
-        {
-            testLedPattern();
-            chThdSleepMilliseconds(100);
+        else {
+          /* If the previous shell exited.*/
+          if (chThdTerminatedX(shelltp)) {
+            /* Recovers memory of the previous shell.*/
+            chThdRelease(shelltp);
+            shelltp = NULL;
+          }
         }
+        chThdSleepMilliseconds(500);
     }
 }
