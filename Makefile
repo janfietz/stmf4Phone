@@ -89,6 +89,15 @@ include $(CHIBIOS)/os/rt/rt.mk
 include $(CHIBIOS)/os/rt/ports/ARMCMx/compilers/GCC/mk/port_stm32f4xx.mk
 include $(CHIBIOS)/test/rt/test.mk
 
+# FATFS files.
+FATFS = ff
+FATFSSRC = ${CHIBIOS}/os/various/fatfs_bindings/fatfs_diskio.c \
+           ${CHIBIOS}/os/various/fatfs_bindings/fatfs_syscall.c \
+           ${FATFS}/src/ff.c \
+           ${FATFS}/src/option/unicode.c
+
+FATFSINC = ${FATFS}/src
+
 # Define linker script file here
 LDSCRIPT= $(PORTLD)/STM32F407xG.ld
 
@@ -101,12 +110,13 @@ CSRC = $(PORTSRC) \
        $(OSALSRC) \
        $(PLATFORMSRC) \
        $(BOARDSRC) \
+       $(FATFSSRC) \
        $(CHIBIOS)/os/various/shell.c \
        $(CHIBIOS)/os/various/chprintf.c \
        main.c \
        cs43l22.c \
-       ws2811.c \
-       usbcfg.c
+       usbcfg.c \
+       mmc.c
 
 # C++ sources that can be compiled in ARM or THUMB mode depending on the global
 # setting.
@@ -137,6 +147,7 @@ ASMSRC = $(PORTASM)
 
 INCDIR = $(PORTINC) $(KERNINC) $(TESTINC) \
          $(HALINC) $(OSALINC) $(PLATFORMINC) $(BOARDINC) \
+         $(FATFSINC) \
          $(CHIBIOS)/os/various
 
 #
