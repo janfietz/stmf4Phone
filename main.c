@@ -35,7 +35,7 @@
 MMCDriver MMCD1;
 
 /* Maximum speed SPI configuration (18MHz, CPHA=0, CPOL=0, MSb first).*/
-static SPIConfig hs_spicfg = {NULL, GPIOC, GPIOC_PIN4, 0};
+static SPIConfig hs_spicfg = {NULL, GPIOC, GPIOC_PIN4, SPI_CR1_BR_1 | SPI_CR1_BR_0};
 
 /* Low speed SPI configuration (281.250kHz, CPHA=0, CPOL=0, MSb first).*/
 static SPIConfig ls_spicfg = {NULL, GPIOC, GPIOC_PIN4,
@@ -381,9 +381,9 @@ int main(void)
      * Initializes the MMC driver to work with SPI2.
      */
     palSetPadMode(GPIOC, GPIOC_PIN4, PAL_MODE_OUTPUT_PUSHPULL | PAL_STM32_OSPEED_HIGHEST | PAL_STM32_PUDR_FLOATING);
-    palSetPadMode(GPIOB, GPIOB_PIN13, PAL_MODE_ALTERNATE(5));
-    palSetPadMode(GPIOB, GPIOB_PIN14, PAL_MODE_ALTERNATE(5));
-    palSetPadMode(GPIOB, GPIOB_PIN15, PAL_MODE_ALTERNATE(5));
+    palSetPadMode(GPIOB, GPIOB_PIN13, PAL_MODE_ALTERNATE(5) | PAL_STM32_OSPEED_HIGHEST );
+    palSetPadMode(GPIOB, GPIOB_PIN14, PAL_MODE_ALTERNATE(5) | PAL_STM32_OSPEED_HIGHEST);
+    palSetPadMode(GPIOB, GPIOB_PIN15, PAL_MODE_ALTERNATE(5) | PAL_STM32_OSPEED_HIGHEST);
 
     mmcObjectInit(&MMCD1);
     mmcStart(&MMCD1, &mmccfg);
